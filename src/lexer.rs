@@ -89,6 +89,12 @@ impl Cursor<'_> {
             '+' | '-' => {
                 if self.terminated(is_delimiter) {
                     Some(Ident)
+                } else if self.peek()?.is_digit(10) {
+                    if self.number(10) {
+                        Some(Number)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -103,6 +109,13 @@ impl Cursor<'_> {
             c if is_whitespace(c) => {
                 self.eat_while(is_whitespace);
                 Some(Whitespace)
+            }
+            c if c.is_digit(10) => {
+                if self.number(10) {
+                    Some(Number)
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -145,6 +158,36 @@ impl Cursor<'_> {
     fn identifier(&mut self) -> bool {
         self.eat_while(is_subsequent);
         self.terminated(is_delimiter)
+    }
+
+    // ureal?
+    fn number(&mut self, base: u32) -> bool {
+        self.uinteger(base);
+
+        if let Some(c) = self.peek() {
+            match c {
+                '/' => {
+                    self.eat();
+                    if let Some(c) = self.eat() {
+                        if !c.is_digit(base) {
+                            return false;
+                        }
+                        self.uinteger(base);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                c => is_delimiter(c),
+            }
+        } else {
+            return true;
+        }
+    }
+
+    fn uinteger(&mut self, base: u32) {
+        self.eat_while(|c| c.is_digit(base));
+        self.eat_while(|c| c == '#');
     }
 }
 
@@ -235,5 +278,17 @@ mod tests {
         assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
         assert_eq!(lexer.get_token(), Some(Token::new(Ident, 8)));
         assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+    }
+
+    #[test]
+    fn test_parse_digit10() {
+        let mut lexer = Cursor::new("1000 +10 10## -1/2");
+        assert_eq!(lexer.get_token(), Some(Token::new(Number, 4)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Number, 3)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Number, 4)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Number, 4)));
     }
 }
