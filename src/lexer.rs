@@ -53,6 +53,8 @@ impl Cursor<'_> {
             '.' => {
                 if self.terminated(is_delimiter) {
                     Some(Dot)
+                } else if self.triple_dot() {
+                    Some(Ident)
                 } else {
                     None
                 }
@@ -64,6 +66,13 @@ impl Cursor<'_> {
                     }
                 }
                 Some(Comment)
+            }
+            '+' | '-' => {
+                if self.terminated(is_delimiter) {
+                    Some(Ident)
+                } else {
+                    None
+                }
             }
             c if is_whitespace(c) => {
                 while let Some(c) = self.peek() {
@@ -91,6 +100,16 @@ impl Cursor<'_> {
             }
         }
         None
+    }
+
+    fn triple_dot(&mut self) -> bool {
+        if self.eat() != Some('.') {
+            return false;
+        }
+        if self.eat() != Some('.') {
+            return false;
+        }
+        self.terminated(is_delimiter)
     }
 }
 
@@ -157,5 +176,16 @@ mod tests {
         assert_eq!(lexer.get_token(), Some(Token::new(Bool, 2)));
         assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
         assert_eq!(lexer.get_token(), Some(Token::new(Bool, 2)));
+    }
+
+    #[test]
+    fn test_parse_peculiar_identifier() {
+        let mut lexer = Cursor::new("+ - ... ");
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 3)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
     }
 }
