@@ -24,19 +24,19 @@ where
         }
     }
 
-    pub fn get_token(&mut self) -> Result<Option<Token>, LexerError> {
+    pub fn get_token(&mut self) -> Result<Token, LexerError> {
         self.skip_atomosphere();
         if let Some(c) = self.stream.next() {
             match c {
-                '(' => Ok(Some(Token::OpenParen)),
-                ')' => Ok(Some(Token::CloseParen)),
+                '(' => Ok(Token::OpenParen),
+                ')' => Ok(Token::CloseParen),
                 '#' => {
                     if let Some(next) = self.stream.next() {
                         match next {
-                            '(' => Ok(Some(Token::SharpParen)),
+                            '(' => Ok(Token::SharpParen),
                             '\\' => {
                                 if let Some(c) = self.stream.next() {
-                                    Ok(Some(Token::Character(c)))
+                                    Ok(Token::Character(c))
                                 } else {
                                     Err(LexerError::UnexpectedEOF)
                                 }
@@ -47,15 +47,15 @@ where
                         Err(LexerError::UnexpectedEOF)
                     }
                 }
-                '"' => Ok(Some(Token::String(self.parse_string()?))),
-                '\'' => Ok(Some(Token::Quote)),
-                '`' => Ok(Some(Token::Backquote)),
+                '"' => Ok(Token::String(self.parse_string()?)),
+                '\'' => Ok(Token::Quote),
+                '`' => Ok(Token::Backquote),
                 ',' => {
                     if self.stream.peek() == Some(&'@') {
                         self.stream.next();
-                        Ok(Some(Token::CommaAt))
+                        Ok(Token::CommaAt)
                     } else {
-                        Ok(Some(Token::Comma))
+                        Ok(Token::Comma)
                     }
                 }
                 '.' => {
@@ -64,12 +64,12 @@ where
                             return Err(LexerError::ExpectedDelimiter);
                         }
                     }
-                    Ok(Some(Token::Dot))
+                    Ok(Token::Dot)
                 }
                 _ => Err(LexerError::InvalidCharacter(c)),
             }
         } else {
-            Ok(None)
+            Ok(Token::Unknown)
         }
     }
 
@@ -143,14 +143,14 @@ mod tests {
         assert_eq!(lexer.get_token(), Ok(Some(Token::Comma)));
         assert_eq!(lexer.get_token(), Ok(Some(Token::CommaAt)));
         assert_eq!(lexer.get_token(), Ok(Some(Token::Dot)));
-        assert_eq!(lexer.get_token(), Ok(None));
+        assert_eq!(lexer.get_token(), Ok(Token::Unknown));
     }
 
     #[test]
     fn test_atomosphere() {
         let mut lexer = Lexer::new("; This is a comment\n(".chars());
         assert_eq!(lexer.get_token(), Ok(Some(Token::OpenParen)));
-        assert_eq!(lexer.get_token(), Ok(None));
+        assert_eq!(lexer.get_token(), Ok(Token::Unknown));
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
             lexer.get_token(),
             Ok(Some(Token::String("\\\"".to_string())))
         );
-        assert_eq!(lexer.get_token(), Ok(None));
+        assert_eq!(lexer.get_token(), Ok(Token::Unknown));
 
         let mut lexer = Lexer::new("\"string".chars());
         assert_eq!(lexer.get_token(), Err(LexerError::UnterminatedString));

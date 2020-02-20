@@ -13,4 +13,5 @@ pub enum Token {
     Comma,
     CommaAt,
     Dot,
+    Unknown,
 }
