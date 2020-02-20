@@ -12,58 +12,36 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn get_token(&mut self) -> Token {
+    pub fn get_token(&mut self) -> Option<Token> {
         self.skip_atomosphere();
-        if let Some(c) = self.stream.eat() {
-            match c {
-                '(' => Token::OpenParen,
-                ')' => Token::CloseParen,
-                '#' => {
-                    if let Some(next) = self.stream.eat() {
-                        match next {
-                            '(' => Token::SharpParen,
-                            '\\' => {
-                                if let Some(c) = self.stream.eat() {
-                                    Token::Character(c)
-                                } else {
-                                    Token::Unknown
-                                }
-                            }
-                            _ => Token::Unknown,
-                        }
-                    } else {
-                        Token::Unknown
-                    }
+        match self.stream.eat()? {
+            '(' => Some(Token::OpenParen),
+            ')' => Some(Token::CloseParen),
+            '#' => match self.stream.eat()? {
+                '(' => Some(Token::SharpParen),
+                '\\' => Some(Token::Character(self.stream.eat()?)),
+                _ => None,
+            },
+            '"' => Some(Token::String(self.parse_string()?)),
+            '\'' => Some(Token::Quote),
+            '`' => Some(Token::Backquote),
+            ',' => {
+                if self.stream.peek() == Some('@') {
+                    self.stream.eat();
+                    Some(Token::CommaAt)
+                } else {
+                    Some(Token::Comma)
                 }
-                '"' => {
-                    if let Some(s) = self.parse_string() {
-                        Token::String(s)
-                    } else {
-                        Token::Unknown
-                    }
-                }
-                '\'' => Token::Quote,
-                '`' => Token::Backquote,
-                ',' => {
-                    if self.stream.peek() == Some('@') {
-                        self.stream.eat();
-                        Token::CommaAt
-                    } else {
-                        Token::Comma
-                    }
-                }
-                '.' => {
-                    if let Some(next) = self.stream.peek() {
-                        if !Self::is_delimiter(&next) {
-                            return Token::Unknown;
-                        }
-                    }
-                    Token::Dot
-                }
-                _ => Token::Unknown,
             }
-        } else {
-            Token::Unknown
+            '.' => {
+                if let Some(next) = self.stream.peek() {
+                    if !Self::is_delimiter(&next) {
+                        return None;
+                    }
+                }
+                Some(Token::Dot)
+            }
+            _ => None,
         }
     }
 
@@ -129,51 +107,51 @@ mod tests {
     #[test]
     fn test_special_tokens() {
         let mut lexer = Lexer::new("()#('`,,@.");
-        assert_eq!(lexer.get_token(), Token::OpenParen);
-        assert_eq!(lexer.get_token(), Token::CloseParen);
-        assert_eq!(lexer.get_token(), Token::SharpParen);
-        assert_eq!(lexer.get_token(), Token::Quote);
-        assert_eq!(lexer.get_token(), Token::Backquote);
-        assert_eq!(lexer.get_token(), Token::Comma);
-        assert_eq!(lexer.get_token(), Token::CommaAt);
-        assert_eq!(lexer.get_token(), Token::Dot);
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), Some(Token::OpenParen));
+        assert_eq!(lexer.get_token(), Some(Token::CloseParen));
+        assert_eq!(lexer.get_token(), Some(Token::SharpParen));
+        assert_eq!(lexer.get_token(), Some(Token::Quote));
+        assert_eq!(lexer.get_token(), Some(Token::Backquote));
+        assert_eq!(lexer.get_token(), Some(Token::Comma));
+        assert_eq!(lexer.get_token(), Some(Token::CommaAt));
+        assert_eq!(lexer.get_token(), Some(Token::Dot));
+        assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_atomosphere() {
         let mut lexer = Lexer::new("; This is a comment\n(");
-        assert_eq!(lexer.get_token(), Token::OpenParen);
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), Some(Token::OpenParen));
+        assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_termination() {
         let mut lexer = Lexer::new(". ..");
-        assert_eq!(lexer.get_token(), Token::Dot);
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), Some(Token::Dot));
+        assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_parse_string() {
         let mut lexer = Lexer::new("\"string\"\"\\\"\"");
-        assert_eq!(lexer.get_token(), Token::String("string".to_string()));
-        assert_eq!(lexer.get_token(), Token::String("\\\"".to_string()));
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), Some(Token::String("string".to_string())));
+        assert_eq!(lexer.get_token(), Some(Token::String("\\\"".to_string())));
+        assert_eq!(lexer.get_token(), None);
 
         let mut lexer = Lexer::new("\"string");
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), None);
 
         let mut lexer = Lexer::new("\\a");
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_parse_character() {
         let mut lexer = Lexer::new("#\\a");
-        assert_eq!(lexer.get_token(), Token::Character('a'));
+        assert_eq!(lexer.get_token(), Some(Token::Character('a')));
 
         let mut lexer = Lexer::new("#\\");
-        assert_eq!(lexer.get_token(), Token::Unknown);
+        assert_eq!(lexer.get_token(), None);
     }
 }
