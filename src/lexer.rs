@@ -1,33 +1,29 @@
+use crate::cursor::Cursor;
 use crate::token::*;
-use std::iter::Peekable;
 
-#[derive(Debug, PartialEq)]
-pub struct Lexer<S> {
-    stream: S,
+pub struct Lexer<'a> {
+    stream: Cursor<'a>,
 }
 
-impl<I> Lexer<Peekable<I>>
-where
-    I: Iterator<Item = char>,
-{
-    pub fn new(stream: I) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
         Self {
-            stream: stream.peekable(),
+            stream: Cursor::new(input),
         }
     }
 
     pub fn get_token(&mut self) -> Token {
         self.skip_atomosphere();
-        if let Some(c) = self.stream.next() {
+        if let Some(c) = self.stream.eat() {
             match c {
                 '(' => Token::OpenParen,
                 ')' => Token::CloseParen,
                 '#' => {
-                    if let Some(next) = self.stream.next() {
+                    if let Some(next) = self.stream.eat() {
                         match next {
                             '(' => Token::SharpParen,
                             '\\' => {
-                                if let Some(c) = self.stream.next() {
+                                if let Some(c) = self.stream.eat() {
                                     Token::Character(c)
                                 } else {
                                     Token::Unknown
@@ -49,8 +45,8 @@ where
                 '\'' => Token::Quote,
                 '`' => Token::Backquote,
                 ',' => {
-                    if self.stream.peek() == Some(&'@') {
-                        self.stream.next();
+                    if self.stream.peek() == Some('@') {
+                        self.stream.eat();
                         Token::CommaAt
                     } else {
                         Token::Comma
@@ -58,7 +54,7 @@ where
                 }
                 '.' => {
                     if let Some(next) = self.stream.peek() {
-                        if !Self::is_delimiter(next) {
+                        if !Self::is_delimiter(&next) {
                             return Token::Unknown;
                         }
                     }
@@ -75,15 +71,15 @@ where
         while let Some(c) = self.stream.peek() {
             match c {
                 ' ' | '\t' | '\n' => {
-                    self.stream.next();
+                    self.stream.eat();
                 }
                 ';' => {
-                    self.stream.next();
+                    self.stream.eat();
                     while let Some(c) = self.stream.peek() {
-                        if c == &'\n' {
+                        if c == '\n' {
                             break;
                         }
-                        self.stream.next();
+                        self.stream.eat();
                     }
                 }
                 _ => break,
@@ -93,11 +89,11 @@ where
 
     fn parse_string(&mut self) -> Option<String> {
         let mut buffer = String::new();
-        while let Some(c) = self.stream.next() {
+        while let Some(c) = self.stream.eat() {
             match c {
                 '"' => return Some(buffer),
                 '\\' => {
-                    if let Some(c) = self.stream.next() {
+                    if let Some(c) = self.stream.eat() {
                         match c {
                             '"' | '\\' => {
                                 buffer.push('\\');
@@ -132,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_special_tokens() {
-        let mut lexer = Lexer::new("()#('`,,@.".chars());
+        let mut lexer = Lexer::new("()#('`,,@.");
         assert_eq!(lexer.get_token(), Token::OpenParen);
         assert_eq!(lexer.get_token(), Token::CloseParen);
         assert_eq!(lexer.get_token(), Token::SharpParen);
@@ -146,38 +142,38 @@ mod tests {
 
     #[test]
     fn test_atomosphere() {
-        let mut lexer = Lexer::new("; This is a comment\n(".chars());
+        let mut lexer = Lexer::new("; This is a comment\n(");
         assert_eq!(lexer.get_token(), Token::OpenParen);
         assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_termination() {
-        let mut lexer = Lexer::new(". ..".chars());
+        let mut lexer = Lexer::new(". ..");
         assert_eq!(lexer.get_token(), Token::Dot);
         assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_parse_string() {
-        let mut lexer = Lexer::new("\"string\"\"\\\"\"".chars());
+        let mut lexer = Lexer::new("\"string\"\"\\\"\"");
         assert_eq!(lexer.get_token(), Token::String("string".to_string()));
         assert_eq!(lexer.get_token(), Token::String("\\\"".to_string()));
         assert_eq!(lexer.get_token(), Token::Unknown);
 
-        let mut lexer = Lexer::new("\"string".chars());
+        let mut lexer = Lexer::new("\"string");
         assert_eq!(lexer.get_token(), Token::Unknown);
 
-        let mut lexer = Lexer::new("\\a".chars());
+        let mut lexer = Lexer::new("\\a");
         assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_parse_character() {
-        let mut lexer = Lexer::new("#\\a".chars());
+        let mut lexer = Lexer::new("#\\a");
         assert_eq!(lexer.get_token(), Token::Character('a'));
 
-        let mut lexer = Lexer::new("#\\".chars());
+        let mut lexer = Lexer::new("#\\");
         assert_eq!(lexer.get_token(), Token::Unknown);
     }
 }
