@@ -44,12 +44,11 @@ impl Cursor<'_> {
                 }
             }
             '.' => {
-                if let Some(next) = self.peek() {
-                    if !is_delimiter(next) {
-                        return None;
-                    }
+                if self.terminated(is_delimiter) {
+                    Some(Dot)
+                } else {
+                    None
                 }
-                Some(Dot)
             }
             ';' => {
                 while let Some(c) = self.eat() {

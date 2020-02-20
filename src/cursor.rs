@@ -18,4 +18,12 @@ impl<'a> Cursor<'a> {
     pub fn eat(&mut self) -> Option<char> {
         self.chars.next()
     }
+
+    pub fn terminated<P: Fn(char) -> bool>(&self, pred: P) -> bool {
+        if let Some(c) = self.peek() {
+            pred(c)
+        } else {
+            true
+        }
+    }
 }
