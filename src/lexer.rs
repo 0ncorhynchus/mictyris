@@ -16,6 +16,16 @@ pub fn is_delimiter(c: char) -> bool {
     }
 }
 
+pub fn is_initial(c: char) -> bool {
+    match c {
+        '!' | '$' | '%' | '&' | '*' | '/' | ':' => true,
+        '<' | '=' | '>' | '?' | '^' | '_' | '~' => true,
+        c if 'a' <= c && c <= 'z' => true,
+        c if 'A' <= c && c <= 'Z' => true,
+        _ => false,
+    }
+}
+
 impl Cursor<'_> {
     pub fn get_token(&mut self) -> Option<Token> {
         let kind = self.get_token_kind()?;
@@ -74,6 +84,13 @@ impl Cursor<'_> {
                     None
                 }
             }
+            c if is_initial(c) => {
+                if self.identifier() {
+                    Some(Ident)
+                } else {
+                    None
+                }
+            }
             c if is_whitespace(c) => {
                 while let Some(c) = self.peek() {
                     if is_whitespace(c) {
@@ -108,6 +125,19 @@ impl Cursor<'_> {
         }
         if self.eat() != Some('.') {
             return false;
+        }
+        self.terminated(is_delimiter)
+    }
+
+    fn identifier(&mut self) -> bool {
+        while let Some(c) = self.peek() {
+            match c {
+                c if is_initial(c) => (),
+                c if c.is_digit(10) => (),
+                '+' | '-' | '.' | '@' => (),
+                _ => break,
+            }
+            self.eat();
         }
         self.terminated(is_delimiter)
     }
@@ -186,6 +216,19 @@ mod tests {
         assert_eq!(lexer.get_token(), Some(Token::new(Ident, 1)));
         assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
         assert_eq!(lexer.get_token(), Some(Token::new(Ident, 3)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+    }
+
+    #[test]
+    fn test_parse_identifier() {
+        let mut lexer = Cursor::new("lambda x list->vector complex? ");
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 6)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 12)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Ident, 8)));
         assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
     }
 }
