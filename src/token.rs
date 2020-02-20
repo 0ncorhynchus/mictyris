@@ -1,10 +1,14 @@
-#[derive(Debug, PartialEq)]
-pub enum Token {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TokenKind {
+    // Atomosphere
+    Whitespace,
+    Comment,
+
     Identifier,
     Boolean,
     Number,
-    Character(char),
-    String(String),
+    Character,
+    String,
     OpenParen,
     CloseParen,
     SharpParen,
