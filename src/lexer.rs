@@ -33,6 +33,7 @@ impl Cursor<'_> {
                     self.eat()?;
                     Some(Character)
                 }
+                't' | 'f' => Some(Bool),
                 _ => None,
             },
             '"' => {
@@ -148,5 +149,13 @@ mod tests {
 
         let mut lexer = Cursor::new("#\\");
         assert_eq!(lexer.get_token(), None);
+    }
+
+    #[test]
+    fn test_parse_boolean() {
+        let mut lexer = Cursor::new("#t #f");
+        assert_eq!(lexer.get_token(), Some(Token::new(Bool, 2)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Whitespace, 1)));
+        assert_eq!(lexer.get_token(), Some(Token::new(Bool, 2)));
     }
 }
