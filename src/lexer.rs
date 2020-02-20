@@ -2,14 +2,6 @@ use crate::token::*;
 use std::iter::Peekable;
 
 #[derive(Debug, PartialEq)]
-pub enum LexerError {
-    ExpectedDelimiter,
-    InvalidCharacter(char),
-    UnexpectedEOF,
-    UnterminatedString,
-}
-
-#[derive(Debug, PartialEq)]
 pub struct Lexer<S> {
     stream: S,
 }
@@ -24,52 +16,58 @@ where
         }
     }
 
-    pub fn get_token(&mut self) -> Result<Token, LexerError> {
+    pub fn get_token(&mut self) -> Token {
         self.skip_atomosphere();
         if let Some(c) = self.stream.next() {
             match c {
-                '(' => Ok(Token::OpenParen),
-                ')' => Ok(Token::CloseParen),
+                '(' => Token::OpenParen,
+                ')' => Token::CloseParen,
                 '#' => {
                     if let Some(next) = self.stream.next() {
                         match next {
-                            '(' => Ok(Token::SharpParen),
+                            '(' => Token::SharpParen,
                             '\\' => {
                                 if let Some(c) = self.stream.next() {
-                                    Ok(Token::Character(c))
+                                    Token::Character(c)
                                 } else {
-                                    Err(LexerError::UnexpectedEOF)
+                                    Token::Unknown
                                 }
                             }
-                            _ => Err(LexerError::InvalidCharacter(next)),
+                            _ => Token::Unknown,
                         }
                     } else {
-                        Err(LexerError::UnexpectedEOF)
+                        Token::Unknown
                     }
                 }
-                '"' => Ok(Token::String(self.parse_string()?)),
-                '\'' => Ok(Token::Quote),
-                '`' => Ok(Token::Backquote),
+                '"' => {
+                    if let Some(s) = self.parse_string() {
+                        Token::String(s)
+                    } else {
+                        Token::Unknown
+                    }
+                }
+                '\'' => Token::Quote,
+                '`' => Token::Backquote,
                 ',' => {
                     if self.stream.peek() == Some(&'@') {
                         self.stream.next();
-                        Ok(Token::CommaAt)
+                        Token::CommaAt
                     } else {
-                        Ok(Token::Comma)
+                        Token::Comma
                     }
                 }
                 '.' => {
                     if let Some(next) = self.stream.peek() {
                         if !Self::is_delimiter(next) {
-                            return Err(LexerError::ExpectedDelimiter);
+                            return Token::Unknown;
                         }
                     }
-                    Ok(Token::Dot)
+                    Token::Dot
                 }
-                _ => Err(LexerError::InvalidCharacter(c)),
+                _ => Token::Unknown,
             }
         } else {
-            Ok(Token::Unknown)
+            Token::Unknown
         }
     }
 
@@ -93,11 +91,11 @@ where
         }
     }
 
-    fn parse_string(&mut self) -> Result<String, LexerError> {
+    fn parse_string(&mut self) -> Option<String> {
         let mut buffer = String::new();
         while let Some(c) = self.stream.next() {
             match c {
-                '"' => return Ok(buffer),
+                '"' => return Some(buffer),
                 '\\' => {
                     if let Some(c) = self.stream.next() {
                         match c {
@@ -105,16 +103,16 @@ where
                                 buffer.push('\\');
                                 buffer.push(c);
                             }
-                            _ => return Err(LexerError::InvalidCharacter('\\')),
+                            _ => return None,
                         }
                     } else {
-                        return Err(LexerError::UnterminatedString);
+                        return None;
                     }
                 }
                 _ => buffer.push(c),
             }
         }
-        Err(LexerError::UnterminatedString)
+        None
     }
 
     fn is_delimiter(c: &char) -> bool {
@@ -135,57 +133,51 @@ mod tests {
     #[test]
     fn test_special_tokens() {
         let mut lexer = Lexer::new("()#('`,,@.".chars());
-        assert_eq!(lexer.get_token(), Ok(Some(Token::OpenParen)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::CloseParen)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::SharpParen)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::Quote)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::Backquote)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::Comma)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::CommaAt)));
-        assert_eq!(lexer.get_token(), Ok(Some(Token::Dot)));
-        assert_eq!(lexer.get_token(), Ok(Token::Unknown));
+        assert_eq!(lexer.get_token(), Token::OpenParen);
+        assert_eq!(lexer.get_token(), Token::CloseParen);
+        assert_eq!(lexer.get_token(), Token::SharpParen);
+        assert_eq!(lexer.get_token(), Token::Quote);
+        assert_eq!(lexer.get_token(), Token::Backquote);
+        assert_eq!(lexer.get_token(), Token::Comma);
+        assert_eq!(lexer.get_token(), Token::CommaAt);
+        assert_eq!(lexer.get_token(), Token::Dot);
+        assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_atomosphere() {
         let mut lexer = Lexer::new("; This is a comment\n(".chars());
-        assert_eq!(lexer.get_token(), Ok(Some(Token::OpenParen)));
-        assert_eq!(lexer.get_token(), Ok(Token::Unknown));
+        assert_eq!(lexer.get_token(), Token::OpenParen);
+        assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_termination() {
         let mut lexer = Lexer::new(". ..".chars());
-        assert_eq!(lexer.get_token(), Ok(Some(Token::Dot)));
-        assert_eq!(lexer.get_token(), Err(LexerError::ExpectedDelimiter));
+        assert_eq!(lexer.get_token(), Token::Dot);
+        assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_parse_string() {
         let mut lexer = Lexer::new("\"string\"\"\\\"\"".chars());
-        assert_eq!(
-            lexer.get_token(),
-            Ok(Some(Token::String("string".to_string())))
-        );
-        assert_eq!(
-            lexer.get_token(),
-            Ok(Some(Token::String("\\\"".to_string())))
-        );
-        assert_eq!(lexer.get_token(), Ok(Token::Unknown));
+        assert_eq!(lexer.get_token(), Token::String("string".to_string()));
+        assert_eq!(lexer.get_token(), Token::String("\\\"".to_string()));
+        assert_eq!(lexer.get_token(), Token::Unknown);
 
         let mut lexer = Lexer::new("\"string".chars());
-        assert_eq!(lexer.get_token(), Err(LexerError::UnterminatedString));
+        assert_eq!(lexer.get_token(), Token::Unknown);
 
         let mut lexer = Lexer::new("\\a".chars());
-        assert_eq!(lexer.get_token(), Err(LexerError::InvalidCharacter('\\')));
+        assert_eq!(lexer.get_token(), Token::Unknown);
     }
 
     #[test]
     fn test_parse_character() {
         let mut lexer = Lexer::new("#\\a".chars());
-        assert_eq!(lexer.get_token(), Ok(Some(Token::Character('a'))));
+        assert_eq!(lexer.get_token(), Token::Character('a'));
 
         let mut lexer = Lexer::new("#\\".chars());
-        assert_eq!(lexer.get_token(), Err(LexerError::UnexpectedEOF));
+        assert_eq!(lexer.get_token(), Token::Unknown);
     }
 }
