@@ -31,12 +31,17 @@ where
                 '(' => Ok(Some(Token::OpenParen)),
                 ')' => Ok(Some(Token::CloseParen)),
                 '#' => {
-                    if let Some(next) = self.stream.peek() {
-                        if next == &'(' {
-                            self.stream.next();
-                            Ok(Some(Token::SharpParen))
-                        } else {
-                            Err(LexerError::InvalidCharacter(*next))
+                    if let Some(next) = self.stream.next() {
+                        match next {
+                            '(' => Ok(Some(Token::SharpParen)),
+                            '\\' => {
+                                if let Some(c) = self.stream.next() {
+                                    Ok(Some(Token::Character(c)))
+                                } else {
+                                    Err(LexerError::UnexpectedEOF)
+                                }
+                            }
+                            _ => Err(LexerError::InvalidCharacter(next)),
                         }
                     } else {
                         Err(LexerError::UnexpectedEOF)
@@ -173,5 +178,14 @@ mod tests {
 
         let mut lexer = Lexer::new("\\a".chars());
         assert_eq!(lexer.get_token(), Err(LexerError::InvalidCharacter('\\')));
+    }
+
+    #[test]
+    fn test_parse_character() {
+        let mut lexer = Lexer::new("#\\a".chars());
+        assert_eq!(lexer.get_token(), Ok(Some(Token::Character('a'))));
+
+        let mut lexer = Lexer::new("#\\".chars());
+        assert_eq!(lexer.get_token(), Err(LexerError::UnexpectedEOF));
     }
 }

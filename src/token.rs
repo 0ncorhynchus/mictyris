@@ -3,7 +3,7 @@ pub enum Token {
     Identifier,
     Boolean,
     Number,
-    Character,
+    Character(char),
     String(String),
     OpenParen,
     CloseParen,
