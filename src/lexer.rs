@@ -26,6 +26,15 @@ pub fn is_initial(c: char) -> bool {
     }
 }
 
+pub fn is_subsequent(c: char) -> bool {
+    match c {
+        c if is_initial(c) => true,
+        c if c.is_digit(10) => true,
+        '+' | '-' | '.' | '@' => true,
+        _ => false,
+    }
+}
+
 impl Cursor<'_> {
     pub fn get_token(&mut self) -> Option<Token> {
         let kind = self.get_token_kind()?;
@@ -92,16 +101,20 @@ impl Cursor<'_> {
                 }
             }
             c if is_whitespace(c) => {
-                while let Some(c) = self.peek() {
-                    if is_whitespace(c) {
-                        self.eat();
-                    } else {
-                        break;
-                    }
-                }
+                self.eat_while(is_whitespace);
                 Some(Whitespace)
             }
             _ => None,
+        }
+    }
+
+    fn eat_while<P: Fn(char) -> bool>(&mut self, pred: P) {
+        while let Some(c) = self.peek() {
+            if pred(c) {
+                self.eat();
+            } else {
+                break;
+            }
         }
     }
 
@@ -130,15 +143,7 @@ impl Cursor<'_> {
     }
 
     fn identifier(&mut self) -> bool {
-        while let Some(c) = self.peek() {
-            match c {
-                c if is_initial(c) => (),
-                c if c.is_digit(10) => (),
-                '+' | '-' | '.' | '@' => (),
-                _ => break,
-            }
-            self.eat();
-        }
+        self.eat_while(is_subsequent);
         self.terminated(is_delimiter)
     }
 }
