@@ -17,7 +17,7 @@ pub fn is_delimiter(c: char) -> bool {
 }
 
 impl Cursor<'_> {
-    pub fn get_token(&mut self) -> Option<TokenKind> {
+    pub fn get_token_kind(&mut self) -> Option<TokenKind> {
         match self.eat()? {
             '(' => Some(OpenParen),
             ')' => Some(CloseParen),
@@ -94,53 +94,53 @@ mod tests {
     #[test]
     fn test_special_tokens() {
         let mut lexer = Cursor::new("()#('`,,@.");
-        assert_eq!(lexer.get_token(), Some(OpenParen));
-        assert_eq!(lexer.get_token(), Some(CloseParen));
-        assert_eq!(lexer.get_token(), Some(SharpParen));
-        assert_eq!(lexer.get_token(), Some(Quote));
-        assert_eq!(lexer.get_token(), Some(Backquote));
-        assert_eq!(lexer.get_token(), Some(Comma));
-        assert_eq!(lexer.get_token(), Some(CommaAt));
-        assert_eq!(lexer.get_token(), Some(Dot));
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), Some(OpenParen));
+        assert_eq!(lexer.get_token_kind(), Some(CloseParen));
+        assert_eq!(lexer.get_token_kind(), Some(SharpParen));
+        assert_eq!(lexer.get_token_kind(), Some(Quote));
+        assert_eq!(lexer.get_token_kind(), Some(Backquote));
+        assert_eq!(lexer.get_token_kind(), Some(Comma));
+        assert_eq!(lexer.get_token_kind(), Some(CommaAt));
+        assert_eq!(lexer.get_token_kind(), Some(Dot));
+        assert_eq!(lexer.get_token_kind(), None);
     }
 
     #[test]
     fn test_comment() {
         let mut lexer = Cursor::new("; This is a comment\n(");
-        assert_eq!(lexer.get_token(), Some(Comment));
-        assert_eq!(lexer.get_token(), Some(OpenParen));
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), Some(Comment));
+        assert_eq!(lexer.get_token_kind(), Some(OpenParen));
+        assert_eq!(lexer.get_token_kind(), None);
     }
 
     #[test]
     fn test_termination() {
         let mut lexer = Cursor::new(". ..");
-        assert_eq!(lexer.get_token(), Some(Dot));
-        assert_eq!(lexer.get_token(), Some(Whitespace));
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), Some(Dot));
+        assert_eq!(lexer.get_token_kind(), Some(Whitespace));
+        assert_eq!(lexer.get_token_kind(), None);
     }
 
     #[test]
     fn test_parse_string() {
         let mut lexer = Cursor::new("\"string\"\"\\\"\"");
-        assert_eq!(lexer.get_token(), Some(Str));
-        assert_eq!(lexer.get_token(), Some(Str));
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), Some(Str));
+        assert_eq!(lexer.get_token_kind(), Some(Str));
+        assert_eq!(lexer.get_token_kind(), None);
 
         let mut lexer = Cursor::new("\"string");
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), None);
 
         let mut lexer = Cursor::new("\\a");
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), None);
     }
 
     #[test]
     fn test_parse_character() {
         let mut lexer = Cursor::new("#\\a");
-        assert_eq!(lexer.get_token(), Some(Character));
+        assert_eq!(lexer.get_token_kind(), Some(Character));
 
         let mut lexer = Cursor::new("#\\");
-        assert_eq!(lexer.get_token(), None);
+        assert_eq!(lexer.get_token_kind(), None);
     }
 }
