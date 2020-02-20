@@ -82,25 +82,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn parse_string(&mut self) -> Option<String> {
-        let mut buffer = String::new();
+    fn parse_string(&mut self) -> Option<()> {
         while let Some(c) = self.stream.eat() {
             match c {
-                '"' => return Some(buffer),
-                '\\' => {
-                    if let Some(c) = self.stream.eat() {
-                        match c {
-                            '"' | '\\' => {
-                                buffer.push('\\');
-                                buffer.push(c);
-                            }
-                            _ => return None,
-                        }
-                    } else {
-                        return None;
-                    }
-                }
-                _ => buffer.push(c),
+                '"' => return Some(()),
+                '\\' => match self.stream.eat()? {
+                    '"' | '\\' => (),
+                    _ => return None,
+                },
+                _ => (),
             }
         }
         None
