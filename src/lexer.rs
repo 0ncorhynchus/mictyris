@@ -6,6 +6,7 @@ pub enum LexerError {
     ExpectedDelimiter,
     InvalidCharacter(char),
     UnexpectedEOF,
+    UnterminatedString,
 }
 
 #[derive(Debug, PartialEq)]
@@ -41,6 +42,7 @@ where
                         Err(LexerError::UnexpectedEOF)
                     }
                 }
+                '"' => Ok(Some(Token::String(self.parse_string()?))),
                 '\'' => Ok(Some(Token::Quote)),
                 '`' => Ok(Some(Token::Backquote)),
                 ',' => {
@@ -86,6 +88,30 @@ where
         }
     }
 
+    fn parse_string(&mut self) -> Result<String, LexerError> {
+        let mut buffer = String::new();
+        while let Some(c) = self.stream.next() {
+            match c {
+                '"' => return Ok(buffer),
+                '\\' => {
+                    if let Some(c) = self.stream.next() {
+                        match c {
+                            '"' | '\\' => {
+                                buffer.push('\\');
+                                buffer.push(c);
+                            }
+                            _ => return Err(LexerError::InvalidCharacter('\\')),
+                        }
+                    } else {
+                        return Err(LexerError::UnterminatedString);
+                    }
+                }
+                _ => buffer.push(c),
+            }
+        }
+        Err(LexerError::UnterminatedString)
+    }
+
     fn is_delimiter(c: &char) -> bool {
         if c.is_ascii_whitespace() {
             return true;
@@ -127,5 +153,25 @@ mod tests {
         let mut lexer = Lexer::new(". ..".chars());
         assert_eq!(lexer.get_token(), Ok(Some(Token::Dot)));
         assert_eq!(lexer.get_token(), Err(LexerError::ExpectedDelimiter));
+    }
+
+    #[test]
+    fn test_parse_string() {
+        let mut lexer = Lexer::new("\"string\"\"\\\"\"".chars());
+        assert_eq!(
+            lexer.get_token(),
+            Ok(Some(Token::String("string".to_string())))
+        );
+        assert_eq!(
+            lexer.get_token(),
+            Ok(Some(Token::String("\\\"".to_string())))
+        );
+        assert_eq!(lexer.get_token(), Ok(None));
+
+        let mut lexer = Lexer::new("\"string".chars());
+        assert_eq!(lexer.get_token(), Err(LexerError::UnterminatedString));
+
+        let mut lexer = Lexer::new("\\a".chars());
+        assert_eq!(lexer.get_token(), Err(LexerError::InvalidCharacter('\\')));
     }
 }

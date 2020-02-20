@@ -4,7 +4,7 @@ pub enum Token {
     Boolean,
     Number,
     Character,
-    String,
+    String(String),
     OpenParen,
     CloseParen,
     SharpParen,
