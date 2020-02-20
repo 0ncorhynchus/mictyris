@@ -1,4 +1,5 @@
 use crate::cursor::Cursor;
+use crate::token::TokenKind::*;
 use crate::token::*;
 
 pub fn is_whitespace(c: char) -> bool {
@@ -28,28 +29,28 @@ impl<'a> Lexer<'a> {
 
     pub fn get_token(&mut self) -> Option<TokenKind> {
         match self.stream.eat()? {
-            '(' => Some(TokenKind::OpenParen),
-            ')' => Some(TokenKind::CloseParen),
+            '(' => Some(OpenParen),
+            ')' => Some(CloseParen),
             '#' => match self.stream.eat()? {
-                '(' => Some(TokenKind::SharpParen),
+                '(' => Some(SharpParen),
                 '\\' => {
                     self.stream.eat()?;
-                    Some(TokenKind::Character)
+                    Some(Character)
                 }
                 _ => None,
             },
             '"' => {
                 self.parse_string()?;
-                Some(TokenKind::String)
+                Some(Str)
             }
-            '\'' => Some(TokenKind::Quote),
-            '`' => Some(TokenKind::Backquote),
+            '\'' => Some(Quote),
+            '`' => Some(Backquote),
             ',' => {
                 if self.stream.peek() == Some('@') {
                     self.stream.eat();
-                    Some(TokenKind::CommaAt)
+                    Some(CommaAt)
                 } else {
-                    Some(TokenKind::Comma)
+                    Some(Comma)
                 }
             }
             '.' => {
@@ -58,7 +59,7 @@ impl<'a> Lexer<'a> {
                         return None;
                     }
                 }
-                Some(TokenKind::Dot)
+                Some(Dot)
             }
             ';' => {
                 while let Some(c) = self.stream.eat() {
@@ -66,7 +67,7 @@ impl<'a> Lexer<'a> {
                         break;
                     }
                 }
-                Some(TokenKind::Comment)
+                Some(Comment)
             }
             c if is_whitespace(c) => {
                 while let Some(c) = self.stream.peek() {
@@ -76,7 +77,7 @@ impl<'a> Lexer<'a> {
                         break;
                     }
                 }
-                Some(TokenKind::Whitespace)
+                Some(Whitespace)
             }
             _ => None,
         }
@@ -104,38 +105,38 @@ mod tests {
     #[test]
     fn test_special_tokens() {
         let mut lexer = Lexer::new("()#('`,,@.");
-        assert_eq!(lexer.get_token(), Some(TokenKind::OpenParen));
-        assert_eq!(lexer.get_token(), Some(TokenKind::CloseParen));
-        assert_eq!(lexer.get_token(), Some(TokenKind::SharpParen));
-        assert_eq!(lexer.get_token(), Some(TokenKind::Quote));
-        assert_eq!(lexer.get_token(), Some(TokenKind::Backquote));
-        assert_eq!(lexer.get_token(), Some(TokenKind::Comma));
-        assert_eq!(lexer.get_token(), Some(TokenKind::CommaAt));
-        assert_eq!(lexer.get_token(), Some(TokenKind::Dot));
+        assert_eq!(lexer.get_token(), Some(OpenParen));
+        assert_eq!(lexer.get_token(), Some(CloseParen));
+        assert_eq!(lexer.get_token(), Some(SharpParen));
+        assert_eq!(lexer.get_token(), Some(Quote));
+        assert_eq!(lexer.get_token(), Some(Backquote));
+        assert_eq!(lexer.get_token(), Some(Comma));
+        assert_eq!(lexer.get_token(), Some(CommaAt));
+        assert_eq!(lexer.get_token(), Some(Dot));
         assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_comment() {
         let mut lexer = Lexer::new("; This is a comment\n(");
-        assert_eq!(lexer.get_token(), Some(TokenKind::Comment));
-        assert_eq!(lexer.get_token(), Some(TokenKind::OpenParen));
+        assert_eq!(lexer.get_token(), Some(Comment));
+        assert_eq!(lexer.get_token(), Some(OpenParen));
         assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_termination() {
         let mut lexer = Lexer::new(". ..");
-        assert_eq!(lexer.get_token(), Some(TokenKind::Dot));
-        assert_eq!(lexer.get_token(), Some(TokenKind::Whitespace));
+        assert_eq!(lexer.get_token(), Some(Dot));
+        assert_eq!(lexer.get_token(), Some(Whitespace));
         assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_parse_string() {
         let mut lexer = Lexer::new("\"string\"\"\\\"\"");
-        assert_eq!(lexer.get_token(), Some(TokenKind::String));
-        assert_eq!(lexer.get_token(), Some(TokenKind::String));
+        assert_eq!(lexer.get_token(), Some(Str));
+        assert_eq!(lexer.get_token(), Some(Str));
         assert_eq!(lexer.get_token(), None);
 
         let mut lexer = Lexer::new("\"string");
@@ -148,7 +149,7 @@ mod tests {
     #[test]
     fn test_parse_character() {
         let mut lexer = Lexer::new("#\\a");
-        assert_eq!(lexer.get_token(), Some(TokenKind::Character));
+        assert_eq!(lexer.get_token(), Some(Character));
 
         let mut lexer = Lexer::new("#\\");
         assert_eq!(lexer.get_token(), None);

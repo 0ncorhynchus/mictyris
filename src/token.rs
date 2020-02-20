@@ -4,11 +4,14 @@ pub enum TokenKind {
     Whitespace,
     Comment,
 
-    Identifier,
-    Boolean,
+    // Identifier and Literals
+    Ident,
+    Bool,
     Number,
     Character,
-    String,
+    Str,
+
+    // Special tokens
     OpenParen,
     CloseParen,
     SharpParen,
