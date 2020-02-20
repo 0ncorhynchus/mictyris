@@ -16,45 +16,35 @@ pub fn is_delimiter(c: char) -> bool {
     }
 }
 
-pub struct Lexer<'a> {
-    stream: Cursor<'a>,
-}
-
-impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Self {
-        Self {
-            stream: Cursor::new(input),
-        }
-    }
-
+impl Cursor<'_> {
     pub fn get_token(&mut self) -> Option<TokenKind> {
-        match self.stream.eat()? {
+        match self.eat()? {
             '(' => Some(OpenParen),
             ')' => Some(CloseParen),
-            '#' => match self.stream.eat()? {
+            '#' => match self.eat()? {
                 '(' => Some(SharpParen),
                 '\\' => {
-                    self.stream.eat()?;
+                    self.eat()?;
                     Some(Character)
                 }
                 _ => None,
             },
             '"' => {
-                self.parse_string()?;
+                self.string()?;
                 Some(Str)
             }
             '\'' => Some(Quote),
             '`' => Some(Backquote),
             ',' => {
-                if self.stream.peek() == Some('@') {
-                    self.stream.eat();
+                if self.peek() == Some('@') {
+                    self.eat();
                     Some(CommaAt)
                 } else {
                     Some(Comma)
                 }
             }
             '.' => {
-                if let Some(next) = self.stream.peek() {
+                if let Some(next) = self.peek() {
                     if !is_delimiter(next) {
                         return None;
                     }
@@ -62,7 +52,7 @@ impl<'a> Lexer<'a> {
                 Some(Dot)
             }
             ';' => {
-                while let Some(c) = self.stream.eat() {
+                while let Some(c) = self.eat() {
                     if c == '\n' {
                         break;
                     }
@@ -70,9 +60,9 @@ impl<'a> Lexer<'a> {
                 Some(Comment)
             }
             c if is_whitespace(c) => {
-                while let Some(c) = self.stream.peek() {
+                while let Some(c) = self.peek() {
                     if is_whitespace(c) {
-                        self.stream.eat();
+                        self.eat();
                     } else {
                         break;
                     }
@@ -83,11 +73,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn parse_string(&mut self) -> Option<()> {
-        while let Some(c) = self.stream.eat() {
+    fn string(&mut self) -> Option<()> {
+        while let Some(c) = self.eat() {
             match c {
                 '"' => return Some(()),
-                '\\' => match self.stream.eat()? {
+                '\\' => match self.eat()? {
                     '"' | '\\' => (),
                     _ => return None,
                 },
@@ -104,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_special_tokens() {
-        let mut lexer = Lexer::new("()#('`,,@.");
+        let mut lexer = Cursor::new("()#('`,,@.");
         assert_eq!(lexer.get_token(), Some(OpenParen));
         assert_eq!(lexer.get_token(), Some(CloseParen));
         assert_eq!(lexer.get_token(), Some(SharpParen));
@@ -118,7 +108,7 @@ mod tests {
 
     #[test]
     fn test_comment() {
-        let mut lexer = Lexer::new("; This is a comment\n(");
+        let mut lexer = Cursor::new("; This is a comment\n(");
         assert_eq!(lexer.get_token(), Some(Comment));
         assert_eq!(lexer.get_token(), Some(OpenParen));
         assert_eq!(lexer.get_token(), None);
@@ -126,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_termination() {
-        let mut lexer = Lexer::new(". ..");
+        let mut lexer = Cursor::new(". ..");
         assert_eq!(lexer.get_token(), Some(Dot));
         assert_eq!(lexer.get_token(), Some(Whitespace));
         assert_eq!(lexer.get_token(), None);
@@ -134,24 +124,24 @@ mod tests {
 
     #[test]
     fn test_parse_string() {
-        let mut lexer = Lexer::new("\"string\"\"\\\"\"");
+        let mut lexer = Cursor::new("\"string\"\"\\\"\"");
         assert_eq!(lexer.get_token(), Some(Str));
         assert_eq!(lexer.get_token(), Some(Str));
         assert_eq!(lexer.get_token(), None);
 
-        let mut lexer = Lexer::new("\"string");
+        let mut lexer = Cursor::new("\"string");
         assert_eq!(lexer.get_token(), None);
 
-        let mut lexer = Lexer::new("\\a");
+        let mut lexer = Cursor::new("\\a");
         assert_eq!(lexer.get_token(), None);
     }
 
     #[test]
     fn test_parse_character() {
-        let mut lexer = Lexer::new("#\\a");
+        let mut lexer = Cursor::new("#\\a");
         assert_eq!(lexer.get_token(), Some(Character));
 
-        let mut lexer = Lexer::new("#\\");
+        let mut lexer = Cursor::new("#\\");
         assert_eq!(lexer.get_token(), None);
     }
 }
