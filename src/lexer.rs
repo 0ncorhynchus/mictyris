@@ -8,6 +8,13 @@ pub fn is_whitespace(c: char) -> bool {
     }
 }
 
+pub fn is_delimiter(c: char) -> bool {
+    match c {
+        '(' | ')' | '"' | ';' => true,
+        c => is_whitespace(c),
+    }
+}
+
 pub struct Lexer<'a> {
     stream: Cursor<'a>,
 }
@@ -47,7 +54,7 @@ impl<'a> Lexer<'a> {
             }
             '.' => {
                 if let Some(next) = self.stream.peek() {
-                    if !Self::is_delimiter(&next) {
+                    if !is_delimiter(next) {
                         return None;
                     }
                 }
@@ -97,16 +104,6 @@ impl<'a> Lexer<'a> {
             }
         }
         None
-    }
-
-    fn is_delimiter(c: &char) -> bool {
-        if c.is_ascii_whitespace() {
-            return true;
-        }
-        match c {
-            '(' | ')' | '"' | ';' => true,
-            _ => false,
-        }
     }
 }
 
