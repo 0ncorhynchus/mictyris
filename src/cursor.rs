@@ -2,11 +2,13 @@ use std::str::Chars;
 
 pub struct Cursor<'a> {
     chars: Chars<'a>,
+    last_len: usize,
 }
 
 impl<'a> Cursor<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
+            last_len: input.len(),
             chars: input.chars(),
         }
     }
@@ -25,5 +27,12 @@ impl<'a> Cursor<'a> {
         } else {
             true
         }
+    }
+
+    pub fn len_eaten(&mut self) -> usize {
+        let current = self.chars.as_str().len();
+        let len = self.last_len - current;
+        self.last_len = current;
+        len
     }
 }
