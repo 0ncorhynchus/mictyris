@@ -1,4 +1,4 @@
-pub mod cursor;
+mod cursor;
 
 use TokenKind::*;
 
@@ -125,7 +125,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn parse_number(&mut self, start: usize) -> Option<TokenKind> {
-        let num: f64 = self.substr(start).parse().unwrap();
+        let num: f64 = self.substr(start).parse().ok()?;
         Some(Number(num))
     }
 
@@ -143,6 +143,14 @@ impl<'a> Lexer<'a> {
         };
 
         Some(Character(c))
+    }
+}
+
+impl Iterator for Lexer<'_> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.parse()
     }
 }
 
