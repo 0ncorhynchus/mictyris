@@ -1,4 +1,4 @@
-use super::*;
+use super::{is_delimiter, is_initial, is_whitespace};
 use std::str::Chars;
 
 use TokenKind::*;
