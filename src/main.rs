@@ -1,4 +1,5 @@
 pub mod lexer;
+pub mod parser;
 
 use std::io::{self, Write};
 
@@ -16,9 +17,8 @@ fn main() -> io::Result<()> {
             _ => (),
         }
 
-        let lexer = lexer::Lexer::new(&buffer);
-        let tokens: Vec<_> = lexer.collect();
-        println!("{:?}", tokens);
+        let mut parser = parser::Parser::new(&buffer);
+        println!("{:?}", parser.parse());
     }
     Ok(())
 }
