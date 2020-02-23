@@ -1,5 +1,6 @@
 pub mod lexer;
 pub mod parser;
+pub mod pass;
 
 use std::io::{self, Write};
 
@@ -19,7 +20,10 @@ fn main() -> io::Result<()> {
 
         let mut parser = parser::Parser::new(&buffer);
         match parser.parse() {
-            Some(expr) => println!("{:?}", expr),
+            Some(expr) => {
+                println!("{:?}", expr);
+                println!("{:?}", pass::pass(&expr));
+            }
             None => (),
         }
     }
