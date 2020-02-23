@@ -18,7 +18,10 @@ fn main() -> io::Result<()> {
         }
 
         let mut parser = parser::Parser::new(&buffer);
-        println!("{:?}", parser.parse());
+        match parser.parse() {
+            Some(expr) => println!("{:?}", expr),
+            None => (),
+        }
     }
     Ok(())
 }

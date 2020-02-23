@@ -31,7 +31,7 @@ pub enum Datum {
     Number(f64),
     Character(char),
     Str(String),
-    Symbol(String),
+    Symbol(Identifier),
     List(Vec<Datum>),
     Vector(Vec<Datum>),
 }
@@ -50,23 +50,17 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Option<Expr> {
         let tok = self.lexer.next()?;
         match tok.kind {
-            TokenKind::Ident(ident) => Some(Variable(ident)),
+            TokenKind::Ident(ident) => Some(Variable(ident.var()?)),
             TokenKind::Bool(b) => Some(Literal(Lit::Bool(b))),
             TokenKind::Number(num) => Some(Literal(Lit::Number(num))),
             TokenKind::Character(c) => Some(Literal(Lit::Character(c))),
             TokenKind::Str(s) => Some(Literal(Lit::Str(s))),
-            TokenKind::OpenParen => {
-                if let TokenKind::Ident(ident) = &self.lexer.peek()?.kind {
-                    match ident.as_str() {
-                        "lambda" => self.parse_lambda(),
-                        "if" => self.parse_conditional(),
-                        "set!" => self.parse_assign(),
-                        _ => self.parse_call(),
-                    }
-                } else {
-                    self.parse_call()
-                }
-            }
+            TokenKind::OpenParen => match self.lexer.peek()?.kind.ident()? {
+                Identifier::Lambda => self.parse_lambda(),
+                Identifier::If => self.parse_conditional(),
+                Identifier::Set => self.parse_assign(),
+                _ => self.parse_call(),
+            },
             TokenKind::Quote => Some(Literal(Lit::Quote(self.parse_datum()?))),
             _ => None,
         }
@@ -95,7 +89,7 @@ impl<'a> Parser<'a> {
 
     fn parse_formals(&mut self) -> Option<Vec<String>> {
         match self.lexer.next()?.kind {
-            TokenKind::Ident(ident) => Some(vec![ident]),
+            TokenKind::Ident(ident) => Some(vec![ident.var()?]),
             TokenKind::OpenParen => {
                 let mut idents = Vec::new();
                 while let Some(tok) = self.lexer.next() {
@@ -107,18 +101,14 @@ impl<'a> Parser<'a> {
                             if idents.is_empty() {
                                 return None;
                             }
-                            if let TokenKind::Ident(ident) = self.lexer.next()?.kind {
-                                idents.push(ident);
-                            } else {
-                                return None;
-                            }
+                            idents.push(self.lexer.next()?.kind.ident()?.var()?);
                             if self.eat_close_paren() {
                                 return Some(idents);
                             }
                             return None;
                         }
                         TokenKind::Ident(ident) => {
-                            idents.push(ident);
+                            idents.push(ident.var()?);
                         }
                         _ => return None,
                     }
@@ -165,11 +155,7 @@ impl<'a> Parser<'a> {
 
     fn parse_assign(&mut self) -> Option<Expr> {
         self.lexer.next();
-        let var = if let TokenKind::Ident(ident) = self.lexer.next()?.kind {
-            ident
-        } else {
-            return None;
-        };
+        let var = self.lexer.next()?.kind.ident()?.var()?;
         let expr = Box::new(self.parse()?);
         if self.eat_close_paren() {
             Some(Assignment(var, expr))

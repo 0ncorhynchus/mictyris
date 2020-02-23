@@ -48,7 +48,7 @@ impl Token {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
-    Ident(String),
+    Ident(Identifier),
     Bool(bool),
     Number(f64),
     Character(char),
@@ -61,6 +61,49 @@ pub enum TokenKind {
     Comma,
     CommaAt,
     Dot,
+}
+
+impl TokenKind {
+    pub fn ident(&self) -> Option<&Identifier> {
+        match self {
+            Self::Ident(ident) => Some(ident),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Identifier {
+    Var(String),
+    Else,
+    Arrow,
+    Define,
+    Unquote,
+    UnquoteSplicing,
+    Quote,
+    Lambda,
+    If,
+    Set,
+    Begin,
+    Cond,
+    And,
+    Or,
+    Case,
+    Let,
+    LetStar,
+    Letrec,
+    Do,
+    Delay,
+    Quasiquote,
+}
+
+impl Identifier {
+    pub fn var(&self) -> Option<String> {
+        match self {
+            Self::Var(var) => Some(var.to_string()),
+            _ => None,
+        }
+    }
 }
 
 pub struct Lexer<'a> {
@@ -113,7 +156,30 @@ impl<'a> Lexer<'a> {
 
     fn parse_ident(&mut self, start: usize) -> Option<TokenKind> {
         let ident = self.substr(start);
-        Some(Ident(ident.to_string()))
+        let ident = match ident.to_lowercase().as_str() {
+            "else" => Identifier::Else,
+            "=>" => Identifier::Arrow,
+            "define" => Identifier::Define,
+            "unquote" => Identifier::Unquote,
+            "unquote-splicing" => Identifier::UnquoteSplicing,
+            "quote" => Identifier::Quote,
+            "lambda" => Identifier::Lambda,
+            "if" => Identifier::If,
+            "set!" => Identifier::Set,
+            "begin" => Identifier::Begin,
+            "cond" => Identifier::Cond,
+            "and" => Identifier::And,
+            "or" => Identifier::Or,
+            "case" => Identifier::Case,
+            "let" => Identifier::Let,
+            "let*" => Identifier::LetStar,
+            "letrec" => Identifier::Letrec,
+            "do" => Identifier::Do,
+            "delay" => Identifier::Delay,
+            "quasiquote" => Identifier::Quasiquote,
+            _ => Identifier::Var(ident.to_string()),
+        };
+        Some(Ident(ident))
     }
 
     fn parse_bool(&mut self, start: usize) -> Option<TokenKind> {
@@ -161,8 +227,11 @@ mod tests {
     #[test]
     fn test_parse_ident() {
         let mut lexer = Lexer::new("lambda ...");
-        assert_eq!(lexer.parse(), Some(Token::new(Ident("lambda".to_string()))));
-        assert_eq!(lexer.parse(), Some(Token::new(Ident("...".to_string()))));
+        assert_eq!(lexer.parse(), Some(Token::new(Ident(Identifier::Lambda))));
+        assert_eq!(
+            lexer.parse(),
+            Some(Token::new(Ident(Identifier::Var("...".to_string()))))
+        );
         assert_eq!(lexer.parse(), None);
     }
 
