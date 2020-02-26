@@ -1,5 +1,7 @@
 mod cursor;
 
+use std::fmt;
+
 use TokenKind::*;
 
 pub fn is_whitespace(c: char) -> bool {
@@ -102,6 +104,34 @@ impl Identifier {
         match self {
             Self::Var(var) => Some(var.to_string()),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Var(ident) => write!(f, "{}", ident),
+            Self::Else => write!(f, "else"),
+            Self::Arrow => write!(f, "=>"),
+            Self::Define => write!(f, "define"),
+            Self::Unquote => write!(f, "unquote"),
+            Self::UnquoteSplicing => write!(f, "unquote-splicing"),
+            Self::Quote => write!(f, "quote"),
+            Self::Lambda => write!(f, "lambda"),
+            Self::If => write!(f, "if"),
+            Self::Set => write!(f, "set!"),
+            Self::Begin => write!(f, "begin"),
+            Self::Cond => write!(f, "cond"),
+            Self::And => write!(f, "and"),
+            Self::Or => write!(f, "or"),
+            Self::Case => write!(f, "case"),
+            Self::Let => write!(f, "let"),
+            Self::LetStar => write!(f, "let*"),
+            Self::Letrec => write!(f, "letrec"),
+            Self::Do => write!(f, "do"),
+            Self::Delay => write!(f, "delay"),
+            Self::Quasiquote => write!(f, "quasiquote"),
         }
     }
 }
