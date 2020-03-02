@@ -68,22 +68,23 @@ impl Engine {
         }));
 
         match ast {
-            AST::Const(lit) => Some(send(self.literal(lit), &expr_cont)),
-            AST::Var(ident) => self.variable(ident, &expr_cont),
+            AST::Const(lit) => Some(send(self.literal(lit), expr_cont)),
+            AST::Var(ident) => self.variable(ident, expr_cont),
             _ => None,
         }
     }
 
-    fn variable(&self, ident: &str, expr_cont: &ExprCont) -> Option<CommCont> {
+    fn variable(&self, ident: &str, expr_cont: ExprCont) -> Option<CommCont> {
         let location = match self.env.lookup(ident) {
             Some(location) => location,
             None => {
                 return Some(wrong("undefined variable"));
             }
         };
-        let expr_cont = expr_cont.clone();
-        let cont = single(Box::new(move |value| send(value.clone(), &expr_cont)));
-        Some(hold(location, &cont))
+        let cont = single(Box::new(move |value| {
+            send(value.clone(), Rc::clone(&expr_cont))
+        }));
+        Some(hold(location, cont))
     }
 
     // K: Con -> E
@@ -140,7 +141,7 @@ type Answer = Option<Value>;
 type CommCont = Box<dyn Fn(&mut Store) -> Answer>;
 type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
 
-fn send(value: Value, cont: &ExprCont) -> CommCont {
+fn send(value: Value, cont: ExprCont) -> CommCont {
     cont.borrow()(&[value])
 }
 
@@ -156,10 +157,9 @@ fn single(f: Box<dyn Fn(&Value) -> CommCont>) -> ExprCont {
     }))
 }
 
-fn hold(location: Location, cont: &ExprCont) -> CommCont {
-    let cont = Rc::clone(cont);
+fn hold(location: Location, cont: ExprCont) -> CommCont {
     Box::new(move |store: &mut Store| {
-        let cont = send(store.get(location)?.clone(), &cont);
+        let cont = send(store.get(location)?.clone(), Rc::clone(&cont));
         cont(store)
     })
 }
