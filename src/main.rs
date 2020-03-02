@@ -3,10 +3,12 @@ pub mod lexer;
 pub mod parser;
 pub mod pass;
 
+use engine::Value::*;
 use std::io::{self, Write};
 
 fn main() -> io::Result<()> {
     let mut engine = engine::Engine::new();
+    engine.register("pi", Number(std::f64::consts::PI));
 
     loop {
         print!("mictyris> ");

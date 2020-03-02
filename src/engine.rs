@@ -1,6 +1,9 @@
 use crate::lexer::Identifier;
 use crate::parser::{Datum, Lit};
 use crate::pass::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use std::fmt;
 
@@ -35,27 +38,52 @@ impl fmt::Display for Value {
     }
 }
 
-pub struct Engine {}
+#[derive(Default)]
+pub struct Engine {
+    env: Environment,
+    store: Store,
+}
 
 impl Engine {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
-    pub fn eval(&mut self, ast: &AST) -> Option<Answer> {
+    pub fn register(&mut self, variable: &str, value: Value) {
+        let location = Location(self.store.inner.len());
+        self.env.inner.insert(variable.to_lowercase(), location);
+        self.store.inner.push(value);
+    }
+
+    pub fn eval(&mut self, ast: &AST) -> Answer {
         let cont = self.eval_(ast)?;
-        Some(cont(&mut Store))
+        cont(&mut self.store)
     }
 
     fn eval_(&mut self, ast: &AST) -> Option<CommCont> {
-        let expr_cont: ExprCont = Box::new(|values| {
-            let answer = values.last().unwrap().clone();
-            Box::new(move |_store| answer.clone())
-        });
+        let expr_cont: ExprCont = Rc::new(RefCell::new(|values: &[Value]| {
+            let answer = values.last().cloned();
+            let cont: CommCont = Box::new(move |_store: &mut Store| answer.clone());
+            cont
+        }));
+
         match ast {
             AST::Const(lit) => Some(send(self.literal(lit), &expr_cont)),
+            AST::Var(ident) => self.variable(ident, &expr_cont),
             _ => None,
         }
+    }
+
+    fn variable(&self, ident: &str, expr_cont: &ExprCont) -> Option<CommCont> {
+        let location = match self.env.lookup(ident) {
+            Some(location) => location,
+            None => {
+                return Some(wrong("undefined variable"));
+            }
+        };
+        let expr_cont = expr_cont.clone();
+        let cont = single(Box::new(move |value| send(value.clone(), &expr_cont)));
+        Some(hold(location, &cont))
     }
 
     // K: Con -> E
@@ -82,12 +110,56 @@ impl Engine {
     }
 }
 
-struct Store;
-type Answer = Value;
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Location(usize);
+
+#[derive(Default)]
+struct Environment {
+    inner: HashMap<String, Location>,
+}
+
+impl Environment {
+    fn lookup(&self, ident: &str) -> Option<Location> {
+        self.inner.get(ident).copied()
+    }
+}
+
+#[derive(Default)]
+struct Store {
+    inner: Vec<Value>,
+}
+
+impl Store {
+    fn get(&self, location: Location) -> Option<&Value> {
+        self.inner.get(location.0)
+    }
+}
+
+type Answer = Option<Value>;
 
 type CommCont = Box<dyn Fn(&mut Store) -> Answer>;
-type ExprCont = Box<dyn Fn(&[Value]) -> CommCont>;
+type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
 
 fn send(value: Value, cont: &ExprCont) -> CommCont {
-    cont(&[value])
+    cont.borrow()(&[value])
+}
+
+fn wrong(message: &'static str) -> CommCont {
+    eprintln!("{}", message);
+    Box::new(|_store: &mut Store| None)
+}
+
+fn single(f: Box<dyn Fn(&Value) -> CommCont>) -> ExprCont {
+    Rc::new(RefCell::new(move |exprs: &[Value]| match exprs {
+        [expr] => f(&expr),
+        _ => wrong("wrong number of return values"),
+    }))
+}
+
+fn hold(location: Location, cont: &ExprCont) -> CommCont {
+    let cont = Rc::clone(cont);
+    Box::new(move |store: &mut Store| {
+        let cont = send(store.get(location)?.clone(), &cont);
+        cont(store)
+    })
 }
