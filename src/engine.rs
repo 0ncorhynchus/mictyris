@@ -18,7 +18,10 @@ pub enum Value {
     Vector,
     Str(String),
     Bool(bool),
-    Miscellaneous,
+
+    // Miscellaneous
+    Unspecified,
+
     Procedure,
 }
 
@@ -32,7 +35,7 @@ impl fmt::Display for Value {
             Vector => write!(f, ""),
             Str(s) => write!(f, "{}", s),
             Bool(b) => write!(f, "{}", b),
-            Miscellaneous => write!(f, ""),
+            Unspecified => write!(f, "<unspecified>"),
             Procedure => write!(f, ""),
         }
     }
@@ -40,7 +43,7 @@ impl fmt::Display for Value {
 
 #[derive(Default)]
 pub struct Engine {
-    env: Environment,
+    env: Rc<RefCell<Environment>>,
     store: Store,
 }
 
@@ -51,7 +54,10 @@ impl Engine {
 
     pub fn register(&mut self, variable: &str, value: Value) {
         let location = Location(self.store.inner.len());
-        self.env.inner.insert(variable.to_lowercase(), location);
+        self.env
+            .borrow_mut()
+            .inner
+            .insert(variable.to_lowercase(), location);
         self.store.inner.push(value);
     }
 
@@ -62,15 +68,19 @@ impl Engine {
             cont
         }));
 
-        let cont = eval(ast, &mut self.env, expr_cont);
+        let cont = eval(ast, Rc::clone(&self.env), expr_cont);
         cont(&mut self.store)
     }
 }
 
-fn eval(ast: &AST, env: &mut Environment, expr_cont: ExprCont) -> CommCont {
+fn eval(ast: &AST, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCont {
     match ast {
         AST::Const(lit) => eval_literal(lit, expr_cont),
         AST::Var(ident) => eval_variable(ident, env, expr_cont),
+        AST::Cond(test, conseq, alter) => match alter {
+            Some(alter) => eval_conditional1(test, conseq, alter, env, expr_cont),
+            None => eval_conditional2(test, conseq, env, expr_cont),
+        },
         _ => unimplemented!(),
     }
 }
@@ -101,8 +111,8 @@ fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
     send(literal(lit), expr_cont)
 }
 
-fn eval_variable(ident: &str, env: &Environment, expr_cont: ExprCont) -> CommCont {
-    let location = match env.lookup(ident) {
+fn eval_variable(ident: &str, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCont {
+    let location = match env.borrow().lookup(ident) {
         Some(location) => location,
         None => {
             return wrong("undefined variable");
@@ -112,6 +122,48 @@ fn eval_variable(ident: &str, env: &Environment, expr_cont: ExprCont) -> CommCon
         send(value.clone(), Rc::clone(&expr_cont))
     }));
     hold(location, cont)
+}
+
+fn eval_conditional1(
+    test: &AST,
+    conseq: &AST,
+    alter: &AST,
+    env: Rc<RefCell<Environment>>,
+    cont: ExprCont,
+) -> CommCont {
+    let conseq = conseq.clone();
+    let alter = alter.clone();
+    let copied_env = Rc::clone(&env);
+    let cont = single(Box::new(move |value| {
+        let cont = Rc::clone(&cont);
+        let env = Rc::clone(&copied_env);
+        if truish(value) {
+            eval(&conseq.clone(), env, cont)
+        } else {
+            eval(&alter.clone(), env, cont)
+        }
+    }));
+    eval(test, env, cont)
+}
+
+fn eval_conditional2(
+    test: &AST,
+    conseq: &AST,
+    env: Rc<RefCell<Environment>>,
+    cont: ExprCont,
+) -> CommCont {
+    let conseq = conseq.clone();
+    let copied_env = Rc::clone(&env);
+    let cont = single(Box::new(move |value| {
+        let cont = Rc::clone(&cont);
+        let env = Rc::clone(&copied_env);
+        if truish(value) {
+            eval(&conseq.clone(), env, cont)
+        } else {
+            send(Unspecified, cont)
+        }
+    }));
+    eval(test, env, cont)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -165,4 +217,8 @@ fn hold(location: Location, cont: ExprCont) -> CommCont {
         let cont = send(store.get(location)?.clone(), Rc::clone(&cont));
         cont(store)
     })
+}
+
+fn truish(value: &Value) -> bool {
+    *value != Bool(false)
 }
