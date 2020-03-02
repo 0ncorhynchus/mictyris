@@ -42,9 +42,18 @@ impl Engine {
         Self {}
     }
 
-    pub fn eval(&mut self, ast: &AST) -> Option<Value> {
+    pub fn eval(&mut self, ast: &AST) -> Option<Answer> {
+        let cont = self.eval_(ast)?;
+        Some(cont(&mut Store))
+    }
+
+    fn eval_(&mut self, ast: &AST) -> Option<CommCont> {
+        let expr_cont: ExprCont = Box::new(|values| {
+            let answer = values.last().unwrap().clone();
+            Box::new(move |_store| answer.clone())
+        });
         match ast {
-            AST::Const(lit) => Some(self.literal(lit)),
+            AST::Const(lit) => Some(send(self.literal(lit), &expr_cont)),
             _ => None,
         }
     }
@@ -71,4 +80,14 @@ impl Engine {
             Datum::Vector(_) => Vector,
         }
     }
+}
+
+struct Store;
+type Answer = Value;
+
+type CommCont = Box<dyn Fn(&mut Store) -> Answer>;
+type ExprCont = Box<dyn Fn(&[Value]) -> CommCont>;
+
+fn send(value: Value, cont: &ExprCont) -> CommCont {
+    cont(&[value])
 }
