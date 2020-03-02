@@ -56,58 +56,57 @@ impl Engine {
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
-        let cont = self.eval_(ast)?;
-        cont(&mut self.store)
-    }
-
-    fn eval_(&mut self, ast: &AST) -> Option<CommCont> {
         let expr_cont: ExprCont = Rc::new(RefCell::new(|values: &[Value]| {
             let answer = values.last().cloned();
             let cont: CommCont = Box::new(move |_store: &mut Store| answer.clone());
             cont
         }));
 
-        match ast {
-            AST::Const(lit) => Some(send(self.literal(lit), expr_cont)),
-            AST::Var(ident) => self.variable(ident, expr_cont),
-            _ => None,
-        }
+        let cont = eval(ast, &mut self.env, expr_cont);
+        cont(&mut self.store)
     }
+}
 
-    fn variable(&self, ident: &str, expr_cont: ExprCont) -> Option<CommCont> {
-        let location = match self.env.lookup(ident) {
-            Some(location) => location,
-            None => {
-                return Some(wrong("undefined variable"));
-            }
-        };
-        let cont = single(Box::new(move |value| {
-            send(value.clone(), Rc::clone(&expr_cont))
-        }));
-        Some(hold(location, cont))
+fn eval(ast: &AST, env: &mut Environment, expr_cont: ExprCont) -> CommCont {
+    match ast {
+        AST::Const(lit) => send(literal(lit), expr_cont),
+        AST::Var(ident) => variable(ident, env, expr_cont),
+        _ => unimplemented!(),
     }
+}
 
-    // K: Con -> E
-    fn literal(&self, lit: &Lit) -> Value {
-        match lit {
-            Lit::Bool(b) => Bool(*b),
-            Lit::Number(n) => Number(*n),
-            Lit::Character(c) => Character(*c),
-            Lit::Str(s) => Str(s.clone()),
-            Lit::Quote(d) => self.datum(d),
+fn variable(ident: &str, env: &Environment, expr_cont: ExprCont) -> CommCont {
+    let location = match env.lookup(ident) {
+        Some(location) => location,
+        None => {
+            return wrong("undefined variable");
         }
+    };
+    let cont = single(Box::new(move |value| {
+        send(value.clone(), Rc::clone(&expr_cont))
+    }));
+    hold(location, cont)
+}
+
+fn literal(lit: &Lit) -> Value {
+    match lit {
+        Lit::Bool(b) => Bool(*b),
+        Lit::Number(n) => Number(*n),
+        Lit::Character(c) => Character(*c),
+        Lit::Str(s) => Str(s.clone()),
+        Lit::Quote(d) => datum(d),
     }
+}
 
-    fn datum(&self, datum: &Datum) -> Value {
-        match datum {
-            Datum::Bool(b) => Bool(*b),
-            Datum::Number(n) => Number(*n),
-            Datum::Character(c) => Character(*c),
-            Datum::Str(s) => Str(s.clone()),
-            Datum::Symbol(ident) => Symbol(ident.clone()),
-            Datum::List(_) => Pair,
-            Datum::Vector(_) => Vector,
-        }
+fn datum(datum: &Datum) -> Value {
+    match datum {
+        Datum::Bool(b) => Bool(*b),
+        Datum::Number(n) => Number(*n),
+        Datum::Character(c) => Character(*c),
+        Datum::Str(s) => Str(s.clone()),
+        Datum::Symbol(ident) => Symbol(ident.clone()),
+        Datum::List(_) => Pair,
+        Datum::Vector(_) => Vector,
     }
 }
 
