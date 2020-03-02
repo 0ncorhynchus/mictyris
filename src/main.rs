@@ -5,10 +5,22 @@ pub mod pass;
 
 use engine::Value::*;
 use std::io::{self, Write};
+use std::rc::Rc;
 
 fn main() -> io::Result<()> {
     let mut engine = engine::Engine::new();
     engine.register("pi", Number(std::f64::consts::PI));
+    engine.register_proc(
+        "print",
+        Rc::new(|values, _cont| {
+            let strings: Vec<_> = values.iter().map(|v| v.to_string()).collect();
+            let strings = strings.join(" ");
+            Box::new(move |_| {
+                println!("{}", strings);
+                None
+            })
+        }),
+    );
 
     loop {
         print!("mictyris> ");

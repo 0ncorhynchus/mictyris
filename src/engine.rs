@@ -22,7 +22,7 @@ pub enum Value {
     // Miscellaneous
     Unspecified,
 
-    Procedure,
+    Procedure(Proc),
 }
 
 impl fmt::Display for Value {
@@ -36,7 +36,7 @@ impl fmt::Display for Value {
             Str(s) => write!(f, "{}", s),
             Bool(b) => write!(f, "{}", b),
             Unspecified => write!(f, "<unspecified>"),
-            Procedure => write!(f, ""),
+            Procedure(_) => write!(f, "<procedure>"),
         }
     }
 }
@@ -61,6 +61,23 @@ impl Engine {
         self.store.inner.push(value);
     }
 
+    pub fn register_proc(
+        &mut self,
+        variable: &str,
+        proc: Rc<dyn Fn(&[Value], ExprCont) -> CommCont>,
+    ) {
+        let location = Location(self.store.inner.len());
+        let proc = Procedure(Proc {
+            location,
+            inner: proc,
+        });
+        self.env
+            .borrow_mut()
+            .inner
+            .insert(variable.to_lowercase(), location);
+        self.store.inner.push(proc);
+    }
+
     pub fn eval(&mut self, ast: &AST) -> Answer {
         let expr_cont: ExprCont = Rc::new(RefCell::new(|values: &[Value]| {
             let answer = values.last().cloned();
@@ -77,6 +94,7 @@ fn eval(ast: &AST, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCo
     match ast {
         AST::Const(lit) => eval_literal(lit, expr_cont),
         AST::Var(ident) => eval_variable(ident, env, expr_cont),
+        AST::Call(f, args) => eval_proc_call(f, args, env, expr_cont),
         AST::Cond(test, conseq, alter) => match alter {
             Some(alter) => eval_conditional1(test, conseq, alter, env, expr_cont),
             None => eval_conditional2(test, conseq, env, expr_cont),
@@ -122,6 +140,51 @@ fn eval_variable(ident: &str, env: Rc<RefCell<Environment>>, expr_cont: ExprCont
         send(value.clone(), Rc::clone(&expr_cont))
     }));
     hold(location, cont)
+}
+
+fn eval_proc_call(
+    f: &AST,
+    args: &[AST],
+    env: Rc<RefCell<Environment>>,
+    cont: ExprCont,
+) -> CommCont {
+    let mut exprs = Vec::with_capacity(args.len() + 1);
+    exprs.push(f.clone());
+    exprs.extend_from_slice(args);
+
+    let cont: ExprCont = Rc::new(RefCell::new(move |values: &[Value]| {
+        let (f, args) = values.split_first().unwrap();
+        applicate(f, args, Rc::clone(&cont))
+    }));
+
+    eval_list(&exprs, env, cont)
+}
+
+fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> CommCont {
+    match exprs.split_first() {
+        None => cont.borrow()(&[]),
+        Some((head, tail)) => {
+            let tail: Vec<AST> = tail.iter().cloned().collect();
+            let copied_env = Rc::clone(&env);
+
+            let cont = single(Box::new(move |value: &Value| {
+                let value = value.clone();
+                let cont = Rc::clone(&cont);
+
+                let cont: ExprCont = Rc::new(RefCell::new(move |values: &[Value]| {
+                    let mut args = Vec::with_capacity(values.len() + 1);
+                    args.push(value.clone());
+                    args.extend_from_slice(values);
+
+                    Rc::clone(&cont).borrow()(&args)
+                }));
+
+                eval_list(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
+            }));
+
+            eval(head, env, cont)
+        }
+    }
 }
 
 fn eval_conditional1(
@@ -181,7 +244,7 @@ impl Environment {
 }
 
 #[derive(Default)]
-struct Store {
+pub struct Store {
     inner: Vec<Value>,
 }
 
@@ -191,10 +254,28 @@ impl Store {
     }
 }
 
-type Answer = Option<Value>;
+pub type Answer = Option<Value>;
 
-type CommCont = Box<dyn Fn(&mut Store) -> Answer>;
-type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
+#[derive(Clone)]
+pub struct Proc {
+    location: Location,
+    inner: Rc<dyn Fn(&[Value], ExprCont) -> CommCont>,
+}
+
+impl fmt::Debug for Proc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Proc {{ location: {:?} }}", self.location)
+    }
+}
+
+impl PartialEq for Proc {
+    fn eq(&self, other: &Self) -> bool {
+        self.location == other.location
+    }
+}
+
+pub type CommCont = Box<dyn Fn(&mut Store) -> Answer>;
+pub type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
 
 fn send(value: Value, cont: ExprCont) -> CommCont {
     cont.borrow()(&[value])
@@ -221,4 +302,11 @@ fn hold(location: Location, cont: ExprCont) -> CommCont {
 
 fn truish(value: &Value) -> bool {
     *value != Bool(false)
+}
+
+fn applicate(f: &Value, args: &[Value], cont: ExprCont) -> CommCont {
+    match f {
+        Procedure(proc) => (proc.inner)(args, cont),
+        _ => wrong("bad procedure"),
+    }
 }
