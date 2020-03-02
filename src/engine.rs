@@ -69,13 +69,39 @@ impl Engine {
 
 fn eval(ast: &AST, env: &mut Environment, expr_cont: ExprCont) -> CommCont {
     match ast {
-        AST::Const(lit) => send(literal(lit), expr_cont),
-        AST::Var(ident) => variable(ident, env, expr_cont),
+        AST::Const(lit) => eval_literal(lit, expr_cont),
+        AST::Var(ident) => eval_variable(ident, env, expr_cont),
         _ => unimplemented!(),
     }
 }
 
-fn variable(ident: &str, env: &Environment, expr_cont: ExprCont) -> CommCont {
+fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
+    fn literal(lit: &Lit) -> Value {
+        match lit {
+            Lit::Bool(b) => Bool(*b),
+            Lit::Number(n) => Number(*n),
+            Lit::Character(c) => Character(*c),
+            Lit::Str(s) => Str(s.clone()),
+            Lit::Quote(d) => datum(d),
+        }
+    }
+
+    fn datum(datum: &Datum) -> Value {
+        match datum {
+            Datum::Bool(b) => Bool(*b),
+            Datum::Number(n) => Number(*n),
+            Datum::Character(c) => Character(*c),
+            Datum::Str(s) => Str(s.clone()),
+            Datum::Symbol(ident) => Symbol(ident.clone()),
+            Datum::List(_) => Pair,
+            Datum::Vector(_) => Vector,
+        }
+    }
+
+    send(literal(lit), expr_cont)
+}
+
+fn eval_variable(ident: &str, env: &Environment, expr_cont: ExprCont) -> CommCont {
     let location = match env.lookup(ident) {
         Some(location) => location,
         None => {
@@ -86,28 +112,6 @@ fn variable(ident: &str, env: &Environment, expr_cont: ExprCont) -> CommCont {
         send(value.clone(), Rc::clone(&expr_cont))
     }));
     hold(location, cont)
-}
-
-fn literal(lit: &Lit) -> Value {
-    match lit {
-        Lit::Bool(b) => Bool(*b),
-        Lit::Number(n) => Number(*n),
-        Lit::Character(c) => Character(*c),
-        Lit::Str(s) => Str(s.clone()),
-        Lit::Quote(d) => datum(d),
-    }
-}
-
-fn datum(datum: &Datum) -> Value {
-    match datum {
-        Datum::Bool(b) => Bool(*b),
-        Datum::Number(n) => Number(*n),
-        Datum::Character(c) => Character(*c),
-        Datum::Str(s) => Str(s.clone()),
-        Datum::Symbol(ident) => Symbol(ident.clone()),
-        Datum::List(_) => Pair,
-        Datum::Vector(_) => Vector,
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
