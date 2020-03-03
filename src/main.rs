@@ -21,7 +21,11 @@ fn main() -> io::Result<()> {
         io::stdout().flush()?;
 
         let mut buffer = String::new();
-        io::stdin().read_line(&mut buffer)?;
+        if io::stdin().read_line(&mut buffer)? == 0 {
+            // EOF
+            println!();
+            break;
+        }
 
         match buffer.trim() {
             "" => continue,
