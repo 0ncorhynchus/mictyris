@@ -43,7 +43,7 @@ impl fmt::Display for Value {
 
 #[derive(Default)]
 pub struct Engine {
-    env: Rc<RefCell<Environment>>,
+    env: Env,
     store: Store,
 }
 
@@ -90,7 +90,7 @@ impl Engine {
     }
 }
 
-fn eval(ast: &AST, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCont {
+fn eval(ast: &AST, env: Env, expr_cont: ExprCont) -> CommCont {
     match ast {
         AST::Const(lit) => eval_literal(lit, expr_cont),
         AST::Var(ident) => eval_variable(ident, env, expr_cont),
@@ -130,7 +130,7 @@ fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
     send(literal(lit), expr_cont)
 }
 
-fn eval_variable(ident: &str, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCont {
+fn eval_variable(ident: &str, env: Env, expr_cont: ExprCont) -> CommCont {
     let location = match env.borrow().lookup(ident) {
         Some(location) => location,
         None => {
@@ -143,12 +143,7 @@ fn eval_variable(ident: &str, env: Rc<RefCell<Environment>>, expr_cont: ExprCont
     hold(location, cont)
 }
 
-fn eval_proc_call(
-    f: &AST,
-    args: &[AST],
-    env: Rc<RefCell<Environment>>,
-    cont: ExprCont,
-) -> CommCont {
+fn eval_proc_call(f: &AST, args: &[AST], env: Env, cont: ExprCont) -> CommCont {
     let mut exprs = Vec::with_capacity(args.len() + 1);
     exprs.push(f.clone());
     exprs.extend_from_slice(args);
@@ -161,7 +156,7 @@ fn eval_proc_call(
     eval_list(&exprs, env, cont)
 }
 
-fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> CommCont {
+fn eval_list(exprs: &[AST], env: Env, cont: ExprCont) -> CommCont {
     match exprs.split_first() {
         None => cont(&[]),
         Some((head, tail)) => {
@@ -192,7 +187,7 @@ fn eval_lambda(
     args: &[String],
     commands: &[AST],
     expr: &AST,
-    env: Rc<RefCell<Environment>>,
+    env: Env,
     cont: ExprCont,
 ) -> CommCont {
     let args = args.to_vec();
@@ -235,7 +230,7 @@ fn eval_lambda(
     })
 }
 
-fn eval_commands(commands: &[AST], env: Rc<RefCell<Environment>>, cont: CommCont) -> CommCont {
+fn eval_commands(commands: &[AST], env: Env, cont: CommCont) -> CommCont {
     match commands.split_first() {
         Some((head, tail)) => {
             let tail = tail.to_vec();
@@ -249,13 +244,7 @@ fn eval_commands(commands: &[AST], env: Rc<RefCell<Environment>>, cont: CommCont
     }
 }
 
-fn eval_conditional1(
-    test: &AST,
-    conseq: &AST,
-    alter: &AST,
-    env: Rc<RefCell<Environment>>,
-    cont: ExprCont,
-) -> CommCont {
+fn eval_conditional1(test: &AST, conseq: &AST, alter: &AST, env: Env, cont: ExprCont) -> CommCont {
     let conseq = conseq.clone();
     let alter = alter.clone();
     let copied_env = Rc::clone(&env);
@@ -271,12 +260,7 @@ fn eval_conditional1(
     eval(test, env, cont)
 }
 
-fn eval_conditional2(
-    test: &AST,
-    conseq: &AST,
-    env: Rc<RefCell<Environment>>,
-    cont: ExprCont,
-) -> CommCont {
+fn eval_conditional2(test: &AST, conseq: &AST, env: Env, cont: ExprCont) -> CommCont {
     let conseq = conseq.clone();
     let copied_env = Rc::clone(&env);
     let cont = single(Rc::new(move |value| {
@@ -291,7 +275,7 @@ fn eval_conditional2(
     eval(test, env, cont)
 }
 
-fn eval_assign(ident: &str, expr: &AST, env: Rc<RefCell<Environment>>, cont: ExprCont) -> CommCont {
+fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
     let ident = ident.to_string();
     let copied_env = Rc::clone(&env);
     let cont = Rc::new(move |value: &Value| {
@@ -308,6 +292,8 @@ fn eval_assign(ident: &str, expr: &AST, env: Rc<RefCell<Environment>>, cont: Exp
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Location(usize);
+
+type Env = Rc<RefCell<Environment>>;
 
 #[derive(Default)]
 struct Environment {
