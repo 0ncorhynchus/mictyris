@@ -42,11 +42,7 @@ fn main() -> io::Result<()> {
             Some(ast) => ast,
             None => continue,
         };
-        let value = match engine.eval(&ast) {
-            Some(value) => value,
-            None => continue,
-        };
-        println!("{}", value);
+        engine.eval_and_print(&ast);
     }
     Ok(())
 }

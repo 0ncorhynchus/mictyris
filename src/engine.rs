@@ -95,6 +95,19 @@ impl Engine {
         let cont = eval(ast, Rc::clone(&self.env), expr_cont);
         cont(&mut self.store)
     }
+
+    pub fn eval_and_print(&mut self, ast: &AST) {
+        let expr_cont: ExprCont = Rc::new(|mut values: Vec<Value>| {
+            if let Some(value) = values.pop() {
+                write(value)
+            } else {
+                Rc::new(|_| None)
+            }
+        });
+
+        let cont = eval(ast, Rc::clone(&self.env), expr_cont);
+        cont(&mut self.store);
+    }
 }
 
 fn eval(ast: &AST, env: Env, expr_cont: ExprCont) -> CommCont {
@@ -532,5 +545,37 @@ fn assign(location: Location, value: Value, cont: CommCont) -> CommCont {
     Rc::new(move |store: &mut Store| {
         store.update(location, value.clone());
         cont(store)
+    })
+}
+
+pub fn write(value: Value) -> CommCont {
+    fn fmt(store: &Store, value: &Value) -> String {
+        match value {
+            Symbol(ident) => format!("{}", ident),
+            Character(c) => format!("#\\{}", c),
+            Number(n) => format!("{}", n),
+            Pair(loc1, loc2, _) => {
+                let head = match store.get(*loc1) {
+                    Some(val) => fmt(store, val),
+                    None => "<not assigned>".to_string(),
+                };
+                let tail = match store.get(*loc2) {
+                    Some(val) => fmt(store, val),
+                    None => "<not assigned>".to_string(),
+                };
+                format!("({} . {})", head, tail)
+            }
+            Vector => format!(""),
+            Str(s) => format!("{}", s),
+            Bool(b) => format!("{}", b),
+            Null => format!("()"),
+            Unspecified => format!("<unspecified>"),
+            Procedure(_) => format!("<procedure>"),
+        }
+    }
+
+    Rc::new(move |store: &mut Store| {
+        println!("{}", fmt(store, &value));
+        Some(Unspecified)
     })
 }
