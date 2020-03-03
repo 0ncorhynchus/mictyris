@@ -81,7 +81,7 @@ impl Engine {
     pub fn eval(&mut self, ast: &AST) -> Answer {
         let expr_cont: ExprCont = Rc::new(RefCell::new(|values: &[Value]| {
             let answer = values.last().cloned();
-            let cont: CommCont = Box::new(move |_store: &mut Store| answer.clone());
+            let cont: CommCont = Box::new(move |_store: &mut Store| answer);
             cont
         }));
 
@@ -164,7 +164,7 @@ fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> Co
     match exprs.split_first() {
         None => cont.borrow()(&[]),
         Some((head, tail)) => {
-            let tail: Vec<AST> = tail.iter().cloned().collect();
+            let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
 
             let cont = single(Box::new(move |value: &Value| {
@@ -284,7 +284,7 @@ impl PartialEq for Proc {
     }
 }
 
-pub type CommCont = Box<dyn Fn(&mut Store) -> Answer>;
+pub type CommCont = Box<dyn FnOnce(&mut Store) -> Answer>;
 pub type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
 
 fn send(value: Value, cont: ExprCont) -> CommCont {
@@ -318,5 +318,26 @@ fn applicate(f: &Value, args: &[Value], cont: ExprCont) -> CommCont {
     match f {
         Procedure(proc) => (proc.inner)(args, cont),
         _ => wrong("bad procedure"),
+    }
+}
+
+fn tievals(f: Box<dyn FnOnce(&[Location]) -> CommCont>, values: &[Value]) -> CommCont {
+    match values.split_first() {
+        Some((head, tail)) => {
+            let head = head.clone();
+            let tail = tail.to_vec();
+            Box::new(move |store: &mut Store| {
+                let location = store.reserve();
+                let new_f = Box::new(move |locations: &[Location]| {
+                    let mut new_locs = Vec::with_capacity(locations.len() + 1);
+                    new_locs.push(location);
+                    new_locs.extend_from_slice(locations);
+                    f(&new_locs)
+                });
+                store.update(location, head);
+                tievals(new_f, &tail)(store)
+            })
+        }
+        None => f(&[]),
     }
 }
