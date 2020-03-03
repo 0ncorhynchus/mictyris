@@ -160,7 +160,7 @@ fn eval_variable(ident: &str, env: Env, expr_cont: ExprCont) -> CommCont {
             return wrong("undefined variable");
         }
     };
-    let cont = single(Rc::new(move |value| send(value, Rc::clone(&expr_cont))));
+    let cont = single(move |value| send(value, Rc::clone(&expr_cont)));
     hold(location, cont)
 }
 
@@ -184,7 +184,7 @@ fn eval_list(exprs: &[AST], env: Env, cont: ExprCont) -> CommCont {
             let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
 
-            let cont = single(Rc::new(move |value: Value| {
+            let cont = single(move |value: Value| {
                 let cont = Rc::clone(&cont);
 
                 let cont: ExprCont = Rc::new(move |mut values| {
@@ -193,7 +193,7 @@ fn eval_list(exprs: &[AST], env: Env, cont: ExprCont) -> CommCont {
                 });
 
                 eval_list(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
-            }));
+            });
 
             eval(head, env, cont)
         }
@@ -317,7 +317,7 @@ fn eval_conditional1(test: &AST, conseq: &AST, alter: &AST, env: Env, cont: Expr
     let conseq = conseq.clone();
     let alter = alter.clone();
     let copied_env = Rc::clone(&env);
-    let cont = single(Rc::new(move |value| {
+    let cont = single(move |value| {
         let cont = Rc::clone(&cont);
         let env = Rc::clone(&copied_env);
         if truish(value) {
@@ -325,14 +325,14 @@ fn eval_conditional1(test: &AST, conseq: &AST, alter: &AST, env: Env, cont: Expr
         } else {
             eval(&alter.clone(), env, cont)
         }
-    }));
+    });
     eval(test, env, cont)
 }
 
 fn eval_conditional2(test: &AST, conseq: &AST, env: Env, cont: ExprCont) -> CommCont {
     let conseq = conseq.clone();
     let copied_env = Rc::clone(&env);
-    let cont = single(Rc::new(move |value| {
+    let cont = single(move |value| {
         let cont = Rc::clone(&cont);
         let env = Rc::clone(&copied_env);
         if truish(value) {
@@ -340,14 +340,14 @@ fn eval_conditional2(test: &AST, conseq: &AST, env: Env, cont: ExprCont) -> Comm
         } else {
             send(Unspecified, cont)
         }
-    }));
+    });
     eval(test, env, cont)
 }
 
 fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
     let ident = ident.to_string();
     let copied_env = Rc::clone(&env);
-    let cont = Rc::new(move |value: Value| {
+    let cont = single(move |value: Value| {
         let location = match env.borrow().lookup(&ident) {
             Some(location) => location,
             None => {
@@ -356,7 +356,7 @@ fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
         };
         assign(location, value, send(Unspecified, Rc::clone(&cont)))
     });
-    eval(expr, copied_env, single(cont))
+    eval(expr, copied_env, cont)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -434,7 +434,10 @@ fn wrong(message: &'static str) -> CommCont {
     Rc::new(|_store: &mut Store| None)
 }
 
-fn single(f: Rc<dyn Fn(Value) -> CommCont>) -> ExprCont {
+fn single<F: 'static>(f: F) -> ExprCont
+where
+    F: Fn(Value) -> CommCont,
+{
     Rc::new(move |mut values| {
         if values.len() == 1 {
             f(values.pop().unwrap())
@@ -490,11 +493,11 @@ fn tievalsrest(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value], n: usiz
     let rest = values[..n].to_vec();
     list(
         &values[n..],
-        single(Rc::new(move |value| {
+        single(move |value| {
             let mut rest = rest.clone();
             rest.push(value);
             tievals(Rc::clone(&f), &rest)
-        })),
+        }),
     )
 }
 
@@ -504,9 +507,7 @@ fn list(values: &[Value], cont: ExprCont) -> CommCont {
             let head = head.clone();
             list(
                 tail,
-                single(Rc::new(move |value| {
-                    cons(&[head.clone(), value], Rc::clone(&cont))
-                })),
+                single(move |value| cons(&[head.clone(), value], Rc::clone(&cont))),
             )
         }
         None => send(Null, cont),
