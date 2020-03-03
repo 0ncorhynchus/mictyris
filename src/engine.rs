@@ -81,7 +81,7 @@ impl Engine {
     pub fn eval(&mut self, ast: &AST) -> Answer {
         let expr_cont: ExprCont = Rc::new(RefCell::new(|values: &[Value]| {
             let answer = values.last().cloned();
-            let cont: CommCont = Box::new(move |_store: &mut Store| answer);
+            let cont: CommCont = Rc::new(move |_store: &mut Store| answer.clone());
             cont
         }));
 
@@ -95,6 +95,7 @@ fn eval(ast: &AST, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCo
         AST::Const(lit) => eval_literal(lit, expr_cont),
         AST::Var(ident) => eval_variable(ident, env, expr_cont),
         AST::Call(f, args) => eval_proc_call(f, args, env, expr_cont),
+        AST::Lambda(args, commands, expr) => eval_lambda(args, commands, expr, env, expr_cont),
         AST::Cond(test, conseq, alter) => match alter {
             Some(alter) => eval_conditional1(test, conseq, alter, env, expr_cont),
             None => eval_conditional2(test, conseq, env, expr_cont),
@@ -136,7 +137,7 @@ fn eval_variable(ident: &str, env: Rc<RefCell<Environment>>, expr_cont: ExprCont
             return wrong("undefined variable");
         }
     };
-    let cont = single(Box::new(move |value| {
+    let cont = single(Rc::new(move |value| {
         send(value.clone(), Rc::clone(&expr_cont))
     }));
     hold(location, cont)
@@ -167,7 +168,7 @@ fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> Co
             let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
 
-            let cont = single(Box::new(move |value: &Value| {
+            let cont = single(Rc::new(move |value: &Value| {
                 let value = value.clone();
                 let cont = Rc::clone(&cont);
 
@@ -187,6 +188,67 @@ fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> Co
     }
 }
 
+fn eval_lambda(
+    args: &[String],
+    commands: &[AST],
+    expr: &AST,
+    env: Rc<RefCell<Environment>>,
+    cont: ExprCont,
+) -> CommCont {
+    let args = args.to_vec();
+    let commands = commands.to_vec();
+    let expr = expr.clone();
+    Rc::new(move |store: &mut Store| {
+        let args = args.clone();
+        let commands = commands.clone();
+        let expr = expr.clone();
+        let env = Rc::clone(&env);
+        let location = store.reserve();
+
+        let inner = Rc::new(move |values: &[Value], cont: ExprCont| {
+            let args = args.clone();
+            let commands = commands.clone();
+            let expr = expr.clone();
+
+            if values.len() == args.len() {
+                let env = Rc::clone(&env);
+                let f = Rc::new(move |locations: &[Location]| {
+                    let env = Rc::clone(&env);
+                    let pairs: Vec<_> = args
+                        .iter()
+                        .cloned()
+                        .zip(locations.iter().copied())
+                        .collect();
+                    env.borrow_mut().extends(&pairs);
+
+                    let cont = eval(&expr, Rc::clone(&env), Rc::clone(&cont));
+                    eval_commands(&commands, env, cont)
+                });
+                tievals(f, values)
+            } else {
+                wrong("wrong number of arguments")
+            }
+        });
+        let proc = Proc { location, inner };
+        store.update(location, Unspecified);
+        send(Procedure(proc), Rc::clone(&cont))(store)
+    })
+}
+
+fn eval_commands(commands: &[AST], env: Rc<RefCell<Environment>>, cont: CommCont) -> CommCont {
+    match commands.split_first() {
+        Some((head, tail)) => {
+            let tail = tail.to_vec();
+            let copied_env = Rc::clone(&env);
+            let cont = Rc::new(RefCell::new(move |_: &[Value]| {
+                eval_commands(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
+            }));
+            eval(head, Rc::clone(&env), cont)
+        }
+        None => cont,
+    }
+}
+
 fn eval_conditional1(
     test: &AST,
     conseq: &AST,
@@ -197,7 +259,7 @@ fn eval_conditional1(
     let conseq = conseq.clone();
     let alter = alter.clone();
     let copied_env = Rc::clone(&env);
-    let cont = single(Box::new(move |value| {
+    let cont = single(Rc::new(move |value| {
         let cont = Rc::clone(&cont);
         let env = Rc::clone(&copied_env);
         if truish(value) {
@@ -217,7 +279,7 @@ fn eval_conditional2(
 ) -> CommCont {
     let conseq = conseq.clone();
     let copied_env = Rc::clone(&env);
-    let cont = single(Box::new(move |value| {
+    let cont = single(Rc::new(move |value| {
         let cont = Rc::clone(&cont);
         let env = Rc::clone(&copied_env);
         if truish(value) {
@@ -240,6 +302,12 @@ struct Environment {
 impl Environment {
     fn lookup(&self, ident: &str) -> Option<Location> {
         self.inner.get(ident).copied()
+    }
+
+    fn extends(&mut self, pairs: &[(String, Location)]) {
+        for (ident, location) in pairs {
+            self.inner.insert(ident.to_lowercase(), *location);
+        }
     }
 }
 
@@ -284,7 +352,7 @@ impl PartialEq for Proc {
     }
 }
 
-pub type CommCont = Box<dyn FnOnce(&mut Store) -> Answer>;
+pub type CommCont = Rc<dyn Fn(&mut Store) -> Answer>;
 pub type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
 
 fn send(value: Value, cont: ExprCont) -> CommCont {
@@ -293,10 +361,10 @@ fn send(value: Value, cont: ExprCont) -> CommCont {
 
 fn wrong(message: &'static str) -> CommCont {
     eprintln!("{}", message);
-    Box::new(|_store: &mut Store| None)
+    Rc::new(|_store: &mut Store| None)
 }
 
-fn single(f: Box<dyn Fn(&Value) -> CommCont>) -> ExprCont {
+fn single(f: Rc<dyn Fn(&Value) -> CommCont>) -> ExprCont {
     Rc::new(RefCell::new(move |exprs: &[Value]| match exprs {
         [expr] => f(&expr),
         _ => wrong("wrong number of return values"),
@@ -304,7 +372,7 @@ fn single(f: Box<dyn Fn(&Value) -> CommCont>) -> ExprCont {
 }
 
 fn hold(location: Location, cont: ExprCont) -> CommCont {
-    Box::new(move |store: &mut Store| {
+    Rc::new(move |store: &mut Store| {
         let cont = send(store.get(location)?.clone(), Rc::clone(&cont));
         cont(store)
     })
@@ -321,20 +389,23 @@ fn applicate(f: &Value, args: &[Value], cont: ExprCont) -> CommCont {
     }
 }
 
-fn tievals(f: Box<dyn FnOnce(&[Location]) -> CommCont>, values: &[Value]) -> CommCont {
+fn tievals(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value]) -> CommCont {
     match values.split_first() {
         Some((head, tail)) => {
             let head = head.clone();
             let tail = tail.to_vec();
-            Box::new(move |store: &mut Store| {
+            let f = Rc::clone(&f);
+            Rc::new(move |store: &mut Store| {
                 let location = store.reserve();
-                let new_f = Box::new(move |locations: &[Location]| {
+                let f = Rc::clone(&f);
+                let new_f = Rc::new(move |locations: &[Location]| {
                     let mut new_locs = Vec::with_capacity(locations.len() + 1);
                     new_locs.push(location);
                     new_locs.extend_from_slice(locations);
                     f(&new_locs)
                 });
-                store.update(location, head);
+
+                store.update(location, head.clone());
                 tievals(new_f, &tail)(store)
             })
         }
