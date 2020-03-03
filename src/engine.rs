@@ -79,11 +79,11 @@ impl Engine {
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
-        let expr_cont: ExprCont = Rc::new(RefCell::new(|values: &[Value]| {
+        let expr_cont: ExprCont = Rc::new(|values: &[Value]| {
             let answer = values.last().cloned();
             let cont: CommCont = Rc::new(move |_store: &mut Store| answer.clone());
             cont
-        }));
+        });
 
         let cont = eval(ast, Rc::clone(&self.env), expr_cont);
         cont(&mut self.store)
@@ -153,17 +153,17 @@ fn eval_proc_call(
     exprs.push(f.clone());
     exprs.extend_from_slice(args);
 
-    let cont: ExprCont = Rc::new(RefCell::new(move |values: &[Value]| {
+    let cont: ExprCont = Rc::new(move |values: &[Value]| {
         let (f, args) = values.split_first().unwrap();
         applicate(f, args, Rc::clone(&cont))
-    }));
+    });
 
     eval_list(&exprs, env, cont)
 }
 
 fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> CommCont {
     match exprs.split_first() {
-        None => cont.borrow()(&[]),
+        None => cont(&[]),
         Some((head, tail)) => {
             let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
@@ -172,13 +172,13 @@ fn eval_list(exprs: &[AST], env: Rc<RefCell<Environment>>, cont: ExprCont) -> Co
                 let value = value.clone();
                 let cont = Rc::clone(&cont);
 
-                let cont: ExprCont = Rc::new(RefCell::new(move |values: &[Value]| {
+                let cont: ExprCont = Rc::new(move |values: &[Value]| {
                     let mut args = Vec::with_capacity(values.len() + 1);
                     args.push(value.clone());
                     args.extend_from_slice(values);
 
-                    Rc::clone(&cont).borrow()(&args)
-                }));
+                    Rc::clone(&cont)(&args)
+                });
 
                 eval_list(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
             }));
@@ -240,9 +240,9 @@ fn eval_commands(commands: &[AST], env: Rc<RefCell<Environment>>, cont: CommCont
         Some((head, tail)) => {
             let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
-            let cont = Rc::new(RefCell::new(move |_: &[Value]| {
+            let cont = Rc::new(move |_: &[Value]| {
                 eval_commands(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
-            }));
+            });
             eval(head, Rc::clone(&env), cont)
         }
         None => cont,
@@ -353,10 +353,10 @@ impl PartialEq for Proc {
 }
 
 pub type CommCont = Rc<dyn Fn(&mut Store) -> Answer>;
-pub type ExprCont = Rc<RefCell<dyn Fn(&[Value]) -> CommCont>>;
+pub type ExprCont = Rc<dyn Fn(&[Value]) -> CommCont>;
 
 fn send(value: Value, cont: ExprCont) -> CommCont {
-    cont.borrow()(&[value])
+    cont(&[value])
 }
 
 fn wrong(message: &'static str) -> CommCont {
@@ -365,10 +365,10 @@ fn wrong(message: &'static str) -> CommCont {
 }
 
 fn single(f: Rc<dyn Fn(&Value) -> CommCont>) -> ExprCont {
-    Rc::new(RefCell::new(move |exprs: &[Value]| match exprs {
+    Rc::new(move |exprs: &[Value]| match exprs {
         [expr] => f(&expr),
         _ => wrong("wrong number of return values"),
-    }))
+    })
 }
 
 fn hold(location: Location, cont: ExprCont) -> CommCont {
