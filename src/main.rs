@@ -12,12 +12,12 @@ fn main() -> io::Result<()> {
     engine.register("pi", Number(std::f64::consts::PI));
     engine.register_proc(
         "print",
-        Rc::new(|values, _cont| {
+        Rc::new(|values, cont| {
             let strings: Vec<_> = values.iter().map(|v| v.to_string()).collect();
             let strings = strings.join(" ");
-            Box::new(move |_| {
+            Rc::new(move |store| {
                 println!("{}", strings);
-                None
+                Rc::clone(&cont).borrow()(&[])(store)
             })
         }),
     );
