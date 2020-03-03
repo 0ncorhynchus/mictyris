@@ -17,7 +17,7 @@ fn main() -> io::Result<()> {
             let strings = strings.join(" ");
             Rc::new(move |store| {
                 println!("{}", strings);
-                Rc::clone(&cont)(&[])(store)
+                Rc::clone(&cont)(vec![])(store)
             })
         }),
     );

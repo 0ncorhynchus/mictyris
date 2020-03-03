@@ -79,7 +79,7 @@ impl Engine {
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
-        let expr_cont: ExprCont = Rc::new(|values: &[Value]| {
+        let expr_cont: ExprCont = Rc::new(|values: Vec<Value>| {
             let answer = values.last().cloned();
             let cont: CommCont = Rc::new(move |_store: &mut Store| answer.clone());
             cont
@@ -137,9 +137,7 @@ fn eval_variable(ident: &str, env: Env, expr_cont: ExprCont) -> CommCont {
             return wrong("undefined variable");
         }
     };
-    let cont = single(Rc::new(move |value| {
-        send(value.clone(), Rc::clone(&expr_cont))
-    }));
+    let cont = single(Rc::new(move |value| send(value, Rc::clone(&expr_cont))));
     hold(location, cont)
 }
 
@@ -148,7 +146,7 @@ fn eval_proc_call(f: &AST, args: &[AST], env: Env, cont: ExprCont) -> CommCont {
     exprs.push(f.clone());
     exprs.extend_from_slice(args);
 
-    let cont: ExprCont = Rc::new(move |values: &[Value]| {
+    let cont: ExprCont = Rc::new(move |values: Vec<Value>| {
         let (f, args) = values.split_first().unwrap();
         applicate(f, args, Rc::clone(&cont))
     });
@@ -158,21 +156,17 @@ fn eval_proc_call(f: &AST, args: &[AST], env: Env, cont: ExprCont) -> CommCont {
 
 fn eval_list(exprs: &[AST], env: Env, cont: ExprCont) -> CommCont {
     match exprs.split_first() {
-        None => cont(&[]),
+        None => cont(vec![]),
         Some((head, tail)) => {
             let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
 
-            let cont = single(Rc::new(move |value: &Value| {
-                let value = value.clone();
+            let cont = single(Rc::new(move |value: Value| {
                 let cont = Rc::clone(&cont);
 
-                let cont: ExprCont = Rc::new(move |values: &[Value]| {
-                    let mut args = Vec::with_capacity(values.len() + 1);
-                    args.push(value.clone());
-                    args.extend_from_slice(values);
-
-                    Rc::clone(&cont)(&args)
+                let cont: ExprCont = Rc::new(move |mut values| {
+                    values.insert(0, value.clone());
+                    Rc::clone(&cont)(values)
                 });
 
                 eval_list(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
@@ -235,7 +229,7 @@ fn eval_commands(commands: &[AST], env: Env, cont: CommCont) -> CommCont {
         Some((head, tail)) => {
             let tail = tail.to_vec();
             let copied_env = Rc::clone(&env);
-            let cont = Rc::new(move |_: &[Value]| {
+            let cont = Rc::new(move |_: Vec<Value>| {
                 eval_commands(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
             });
             eval(head, Rc::clone(&env), cont)
@@ -278,14 +272,14 @@ fn eval_conditional2(test: &AST, conseq: &AST, env: Env, cont: ExprCont) -> Comm
 fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
     let ident = ident.to_string();
     let copied_env = Rc::clone(&env);
-    let cont = Rc::new(move |value: &Value| {
+    let cont = Rc::new(move |value: Value| {
         let location = match env.borrow().lookup(&ident) {
             Some(location) => location,
             None => {
                 return wrong("undefined variable");
             }
         };
-        assign(location, value.clone(), send(Unspecified, Rc::clone(&cont)))
+        assign(location, value, send(Unspecified, Rc::clone(&cont)))
     });
     eval(expr, copied_env, single(cont))
 }
@@ -354,10 +348,10 @@ impl PartialEq for Proc {
 }
 
 pub type CommCont = Rc<dyn Fn(&mut Store) -> Answer>;
-pub type ExprCont = Rc<dyn Fn(&[Value]) -> CommCont>;
+pub type ExprCont = Rc<dyn Fn(Vec<Value>) -> CommCont>;
 
 fn send(value: Value, cont: ExprCont) -> CommCont {
-    cont(&[value])
+    cont(vec![value])
 }
 
 fn wrong(message: &'static str) -> CommCont {
@@ -365,10 +359,13 @@ fn wrong(message: &'static str) -> CommCont {
     Rc::new(|_store: &mut Store| None)
 }
 
-fn single(f: Rc<dyn Fn(&Value) -> CommCont>) -> ExprCont {
-    Rc::new(move |exprs: &[Value]| match exprs {
-        [expr] => f(&expr),
-        _ => wrong("wrong number of return values"),
+fn single(f: Rc<dyn Fn(Value) -> CommCont>) -> ExprCont {
+    Rc::new(move |mut values| {
+        if values.len() == 1 {
+            f(values.pop().unwrap())
+        } else {
+            wrong("wrong number of return values")
+        }
     })
 }
 
@@ -379,8 +376,8 @@ fn hold(location: Location, cont: ExprCont) -> CommCont {
     })
 }
 
-fn truish(value: &Value) -> bool {
-    *value != Bool(false)
+fn truish(value: Value) -> bool {
+    value != Bool(false)
 }
 
 fn applicate(f: &Value, args: &[Value], cont: ExprCont) -> CommCont {
