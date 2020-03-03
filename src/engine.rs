@@ -61,21 +61,26 @@ impl Engine {
         self.store.update(location, value);
     }
 
-    pub fn register_proc(
-        &mut self,
-        variable: &str,
-        proc: Rc<dyn Fn(&[Value], ExprCont) -> CommCont>,
-    ) {
+    pub fn register_proc<F: 'static>(&mut self, variable: &str, proc: F)
+    where
+        F: Fn(&[Value]) -> Value,
+    {
         let location = self.store.reserve();
-        let proc = Procedure(Proc {
-            location,
-            inner: proc,
-        });
         self.env
             .borrow_mut()
             .inner
             .insert(variable.to_lowercase(), location);
-        self.store.update(location, proc);
+        let inner = Rc::new(move |values: &[Value], cont: ExprCont| {
+            let retval = proc(values);
+            let cont: CommCont = Rc::new(move |store: &mut Store| {
+                let cont = Rc::clone(&cont);
+                cont(vec![retval.clone()])(store)
+            });
+            cont
+        });
+
+        self.store
+            .update(location, Procedure(Proc { location, inner }));
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
