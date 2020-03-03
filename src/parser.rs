@@ -32,8 +32,15 @@ pub enum Datum {
     Character(char),
     Str(String),
     Symbol(Identifier),
-    List(Vec<Datum>),
+    List(ListDatum),
     Vector(Vec<Datum>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ListDatum {
+    List(Vec<Datum>),
+    Cons(Vec<Datum>, Box<Datum>),
+    Abbrev(Box<Datum>),
 }
 
 pub struct Parser<'a> {
@@ -200,7 +207,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_abbrev_list(&mut self) -> Option<Datum> {
-        Some(Datum::List(vec![self.parse_datum()?]))
+        Some(Datum::List(ListDatum::Abbrev(Box::new(
+            self.parse_datum()?,
+        ))))
     }
 
     fn parse_list(&mut self) -> Option<Datum> {
@@ -209,16 +218,16 @@ impl<'a> Parser<'a> {
             match tok.kind {
                 TokenKind::CloseParen => {
                     self.lexer.next();
-                    return Some(Datum::List(data));
+                    return Some(Datum::List(ListDatum::List(data)));
                 }
                 TokenKind::Dot => {
                     if data.is_empty() {
                         return None;
                     }
                     self.lexer.next();
-                    data.push(self.parse_datum()?);
+                    let last = Box::new(self.parse_datum()?);
                     if self.eat_close_paren() {
-                        return Some(Datum::List(data));
+                        return Some(Datum::List(ListDatum::Cons(data, last)));
                     }
                     return None;
                 }
