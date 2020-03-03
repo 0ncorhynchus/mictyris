@@ -14,12 +14,13 @@ pub enum Value {
     Symbol(Identifier),
     Character(char),
     Number(f64),
-    Pair,
+    Pair(Location, Location, bool),
     Vector,
     Str(String),
     Bool(bool),
 
     // Miscellaneous
+    Null,
     Unspecified,
 
     Procedure(Proc),
@@ -31,10 +32,11 @@ impl fmt::Display for Value {
             Symbol(ident) => write!(f, "{}", ident),
             Character(c) => write!(f, "#\\{}", c),
             Number(n) => write!(f, "{}", n),
-            Pair => write!(f, ""),
+            Pair(_, _, _) => write!(f, ""),
             Vector => write!(f, ""),
             Str(s) => write!(f, "{}", s),
             Bool(b) => write!(f, "{}", b),
+            Null => write!(f, "()"),
             Unspecified => write!(f, "<unspecified>"),
             Procedure(_) => write!(f, "<procedure>"),
         }
@@ -130,7 +132,7 @@ fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
             Datum::Character(c) => Character(*c),
             Datum::Str(s) => Str(s.clone()),
             Datum::Symbol(ident) => Symbol(ident.clone()),
-            Datum::List(_) => Pair,
+            Datum::List(_) => unimplemented!(),
             Datum::Vector(_) => Vector,
         }
     }
@@ -235,13 +237,53 @@ fn eval_lambda(
 #[allow(unused_variables)]
 fn eval_lambda_dot(
     args: &[String],
-    var: &String,
+    var: &str,
     commands: &[AST],
     expr: &AST,
     env: Env,
     cont: ExprCont,
 ) -> CommCont {
-    unimplemented!()
+    let min_args = args.len();
+    let mut args = args.to_vec();
+    args.push(var.to_string());
+    let commands = commands.to_vec();
+    let expr = expr.clone();
+    Rc::new(move |store: &mut Store| {
+        let args = args.clone();
+        let commands = commands.clone();
+        let expr = expr.clone();
+        let env = Rc::clone(&env);
+        let location = store.reserve();
+
+        let inner = Rc::new(move |values: &[Value], cont: ExprCont| {
+            let args = args.clone();
+            let commands = commands.clone();
+            let expr = expr.clone();
+
+            if values.len() >= min_args {
+                let env = Rc::clone(&env);
+                let f = Rc::new(move |locations: &[Location]| {
+                    let env = Rc::clone(&env);
+                    let pairs: Vec<_> = args
+                        .iter()
+                        .cloned()
+                        .zip(locations.iter().copied())
+                        .collect();
+                    env.borrow_mut().extends(&pairs);
+
+                    let cont = eval(&expr, Rc::clone(&env), Rc::clone(&cont));
+                    eval_commands(&commands, env, cont)
+                });
+                tievalsrest(f, values, min_args)
+            } else {
+                wrong("too few arguments")
+            }
+        });
+
+        let proc = Proc { location, inner };
+        store.update(location, Unspecified);
+        send(Procedure(proc), Rc::clone(&cont))(store)
+    })
 }
 
 fn eval_commands(commands: &[AST], env: Env, cont: CommCont) -> CommCont {
@@ -305,7 +347,7 @@ fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Location(usize);
+pub struct Location(usize);
 
 type Env = Rc<RefCell<Environment>>;
 
@@ -428,6 +470,61 @@ fn tievals(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value]) -> CommCont
             })
         }
         None => f(&[]),
+    }
+}
+
+fn tievalsrest(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value], n: usize) -> CommCont {
+    let rest = values[..n].to_vec();
+    list(
+        &values[n..],
+        single(Rc::new(move |value| {
+            let mut rest = rest.clone();
+            rest.push(value);
+            tievals(Rc::clone(&f), &rest)
+        })),
+    )
+}
+
+fn list(values: &[Value], cont: ExprCont) -> CommCont {
+    match values.split_first() {
+        Some((head, tail)) => {
+            let head = head.clone();
+            list(
+                tail,
+                single(Rc::new(move |value| {
+                    cons(&[head.clone(), value], Rc::clone(&cont))
+                })),
+            )
+        }
+        None => send(Null, cont),
+    }
+}
+
+fn cons(values: &[Value], cont: ExprCont) -> CommCont {
+    twoarg(
+        |head, tail, cont| {
+            let head = head.clone();
+            let tail = tail.clone();
+            Rc::new(move |store: &mut Store| {
+                let loc1 = store.reserve();
+                store.update(loc1, head.clone());
+                let loc2 = store.reserve();
+                store.update(loc2, tail.clone());
+                send(Pair(loc1, loc2, true), Rc::clone(&cont))(store)
+            })
+        },
+        values,
+        cont,
+    )
+}
+
+fn twoarg<F: 'static>(f: F, values: &[Value], cont: ExprCont) -> CommCont
+where
+    F: Fn(&Value, &Value, ExprCont) -> CommCont,
+{
+    match values {
+        [arg1, arg2] => f(arg1, arg2, cont),
+        _ => wrong("wrong number of arguments"),
     }
 }
 
