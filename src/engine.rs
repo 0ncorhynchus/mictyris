@@ -100,7 +100,7 @@ fn eval(ast: &AST, env: Rc<RefCell<Environment>>, expr_cont: ExprCont) -> CommCo
             Some(alter) => eval_conditional1(test, conseq, alter, env, expr_cont),
             None => eval_conditional2(test, conseq, env, expr_cont),
         },
-        _ => unimplemented!(),
+        AST::Assign(ident, expr) => eval_assign(ident, expr, env, expr_cont),
     }
 }
 
@@ -291,6 +291,21 @@ fn eval_conditional2(
     eval(test, env, cont)
 }
 
+fn eval_assign(ident: &str, expr: &AST, env: Rc<RefCell<Environment>>, cont: ExprCont) -> CommCont {
+    let ident = ident.to_string();
+    let copied_env = Rc::clone(&env);
+    let cont = Rc::new(move |value: &Value| {
+        let location = match env.borrow().lookup(&ident) {
+            Some(location) => location,
+            None => {
+                return wrong("undefined variable");
+            }
+        };
+        assign(location, value.clone(), send(Unspecified, Rc::clone(&cont)))
+    });
+    eval(expr, copied_env, single(cont))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Location(usize);
 
@@ -411,4 +426,11 @@ fn tievals(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value]) -> CommCont
         }
         None => f(&[]),
     }
+}
+
+fn assign(location: Location, value: Value, cont: CommCont) -> CommCont {
+    Rc::new(move |store: &mut Store| {
+        store.update(location, value.clone());
+        cont(store)
+    })
 }
