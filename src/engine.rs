@@ -53,12 +53,12 @@ impl Engine {
     }
 
     pub fn register(&mut self, variable: &str, value: Value) {
-        let location = Location(self.store.inner.len());
+        let location = self.store.reserve();
         self.env
             .borrow_mut()
             .inner
             .insert(variable.to_lowercase(), location);
-        self.store.inner.push(value);
+        self.store.update(location, value);
     }
 
     pub fn register_proc(
@@ -66,7 +66,7 @@ impl Engine {
         variable: &str,
         proc: Rc<dyn Fn(&[Value], ExprCont) -> CommCont>,
     ) {
-        let location = Location(self.store.inner.len());
+        let location = self.store.reserve();
         let proc = Procedure(Proc {
             location,
             inner: proc,
@@ -75,7 +75,7 @@ impl Engine {
             .borrow_mut()
             .inner
             .insert(variable.to_lowercase(), location);
-        self.store.inner.push(proc);
+        self.store.update(location, proc);
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
@@ -245,12 +245,22 @@ impl Environment {
 
 #[derive(Default)]
 pub struct Store {
-    inner: Vec<Value>,
+    inner: Vec<Option<Value>>,
 }
 
 impl Store {
     fn get(&self, location: Location) -> Option<&Value> {
-        self.inner.get(location.0)
+        self.inner.get(location.0)?.as_ref()
+    }
+
+    fn reserve(&mut self) -> Location {
+        let location = Location(self.inner.len());
+        self.inner.push(None);
+        location
+    }
+
+    fn update(&mut self, location: Location, value: Value) {
+        self.inner[location.0] = Some(value);
     }
 }
 
