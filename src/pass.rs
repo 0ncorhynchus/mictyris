@@ -5,7 +5,7 @@ pub enum AST {
     Const(Lit),
     Var(String),
     Call(Box<AST>, Vec<AST>),
-    Lambda(Vec<String>, Vec<AST>, Box<AST>),
+    Lambda(Formals, Vec<AST>, Box<AST>),
     Cond(Box<AST>, Box<AST>, Option<Box<AST>>),
     Assign(String, Box<AST>),
 }

@@ -1,5 +1,5 @@
 use crate::lexer::Identifier;
-use crate::parser::{Datum, Lit};
+use crate::parser::{Datum, Formals, Lit};
 use crate::pass::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -100,7 +100,10 @@ fn eval(ast: &AST, env: Env, expr_cont: ExprCont) -> CommCont {
         AST::Const(lit) => eval_literal(lit, expr_cont),
         AST::Var(ident) => eval_variable(ident, env, expr_cont),
         AST::Call(f, args) => eval_proc_call(f, args, env, expr_cont),
-        AST::Lambda(args, commands, expr) => eval_lambda(args, commands, expr, env, expr_cont),
+        AST::Lambda(args, commands, expr) => match args {
+            Formals::List(args) => eval_lambda(args, commands, expr, env, expr_cont),
+            Formals::Dot(args, var) => eval_lambda_dot(args, var, commands, expr, env, expr_cont),
+        },
         AST::Cond(test, conseq, alter) => match alter {
             Some(alter) => eval_conditional1(test, conseq, alter, env, expr_cont),
             None => eval_conditional2(test, conseq, env, expr_cont),
@@ -227,6 +230,18 @@ fn eval_lambda(
         store.update(location, Unspecified);
         send(Procedure(proc), Rc::clone(&cont))(store)
     })
+}
+
+#[allow(unused_variables)]
+fn eval_lambda_dot(
+    args: &[String],
+    var: &String,
+    commands: &[AST],
+    expr: &AST,
+    env: Env,
+    cont: ExprCont,
+) -> CommCont {
+    unimplemented!()
 }
 
 fn eval_commands(commands: &[AST], env: Env, cont: CommCont) -> CommCont {

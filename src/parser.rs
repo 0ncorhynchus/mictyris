@@ -8,7 +8,7 @@ pub enum Expr {
     Variable(String),                              // variable
     Literal(Lit),                                  // literal
     ProcCall(Box<Expr>, Vec<Expr>),                // procedure call
-    Lambda(Vec<String>, Vec<Expr>),                // lambda expression
+    Lambda(Formals, Vec<Expr>),                    // lambda expression
     Cond(Box<Expr>, Box<Expr>, Option<Box<Expr>>), // conditional
     Assignment(String, Box<Expr>),                 // assignment
     Derived,                                       // derived expression
@@ -41,6 +41,12 @@ pub enum ListDatum {
     List(Vec<Datum>),
     Cons(Vec<Datum>, Box<Datum>),
     Abbrev(Box<Datum>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Formals {
+    List(Vec<String>),
+    Dot(Vec<String>, String),
 }
 
 pub struct Parser<'a> {
@@ -94,23 +100,23 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_formals(&mut self) -> Option<Vec<String>> {
+    fn parse_formals(&mut self) -> Option<Formals> {
         match self.lexer.next()?.kind {
-            TokenKind::Ident(ident) => Some(vec![ident.var()?]),
+            TokenKind::Ident(ident) => Some(Formals::Dot(vec![], ident.var()?)),
             TokenKind::OpenParen => {
                 let mut idents = Vec::new();
                 while let Some(tok) = self.lexer.next() {
                     match tok.kind {
                         TokenKind::CloseParen => {
-                            return Some(idents);
+                            return Some(Formals::List(idents));
                         }
                         TokenKind::Dot => {
                             if idents.is_empty() {
                                 return None;
                             }
-                            idents.push(self.lexer.next()?.kind.ident()?.var()?);
+                            let last = self.lexer.next()?.kind.ident()?.var()?;
                             if self.eat_close_paren() {
-                                return Some(idents);
+                                return Some(Formals::Dot(idents, last));
                             }
                             return None;
                         }
@@ -259,7 +265,7 @@ mod tests {
         let mut parser = Parser::new(input);
         let answer = ProcCall(
             Box::new(Lambda(
-                vec!["x".to_string()],
+                Formals::List(vec!["x".to_string()]),
                 vec![Variable("x".to_string())],
             )),
             vec![Literal(Lit::Bool(true))],
