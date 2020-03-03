@@ -55,10 +55,10 @@ impl<'a> Parser<'a> {
             TokenKind::Number(num) => Some(Literal(Lit::Number(num))),
             TokenKind::Character(c) => Some(Literal(Lit::Character(c))),
             TokenKind::Str(s) => Some(Literal(Lit::Str(s))),
-            TokenKind::OpenParen => match self.lexer.peek()?.kind.ident()? {
-                Identifier::Lambda => self.parse_lambda(),
-                Identifier::If => self.parse_conditional(),
-                Identifier::Set => self.parse_assign(),
+            TokenKind::OpenParen => match self.lexer.peek()?.kind.ident() {
+                Some(Identifier::Lambda) => self.parse_lambda(),
+                Some(Identifier::If) => self.parse_conditional(),
+                Some(Identifier::Set) => self.parse_assign(),
                 _ => self.parse_call(),
             },
             TokenKind::Quote => Some(Literal(Lit::Quote(self.parse_datum()?))),
@@ -237,5 +237,24 @@ impl<'a> Parser<'a> {
             data.push(self.parse_datum()?);
         }
         Some(Datum::Vector(data))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_call_lambda() {
+        let input = "((lambda (x) x) #t)";
+        let mut parser = Parser::new(input);
+        let answer = ProcCall(
+            Box::new(Lambda(
+                vec!["x".to_string()],
+                vec![Variable("x".to_string())],
+            )),
+            vec![Literal(Lit::Bool(true))],
+        );
+        assert_eq!(parser.parse(), Some(answer));
     }
 }
