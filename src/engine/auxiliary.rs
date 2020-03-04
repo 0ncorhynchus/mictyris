@@ -12,8 +12,10 @@ pub fn extends(root: &Env, args: &[String], locations: &[Location]) -> Env {
 }
 
 pub fn wrong(message: &'static str) -> CommCont {
-    eprintln!("{}", message);
-    Rc::new(|_store: &mut Store| None)
+    let err = EvalError {
+        message: message.to_string(),
+    };
+    Rc::new(move |_| Err(err.clone()))
 }
 
 pub fn send(value: Value, cont: ExprCont) -> CommCont {

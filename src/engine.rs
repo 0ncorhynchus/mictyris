@@ -40,6 +40,17 @@ impl Value {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct EvalError {
+    pub message: String,
+}
+
+impl fmt::Display for EvalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
 #[derive(Default)]
 pub struct Engine {
     env: Env,
@@ -72,9 +83,9 @@ impl Engine {
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
-        let expr_cont: ExprCont = Rc::new(|values: Vec<Value>| {
-            let answer = values.last().cloned();
-            let cont: CommCont = Rc::new(move |_store: &mut Store| answer.clone());
+        let expr_cont: ExprCont = Rc::new(|mut values: Vec<Value>| {
+            let answer = values.pop().unwrap_or(Unspecified);
+            let cont: CommCont = Rc::new(move |_store: &mut Store| Ok(answer.clone()));
             cont
         });
 
@@ -87,12 +98,15 @@ impl Engine {
             if let Some(value) = values.pop() {
                 write(value)
             } else {
-                Rc::new(|_| None)
+                Rc::new(|_| Ok(Unspecified))
             }
         });
 
         let cont = eval(ast, Rc::clone(&self.env), expr_cont);
-        cont(&mut self.store);
+        match cont(&mut self.store) {
+            Ok(_) => (),
+            Err(err) => eprintln!("Error: {}", err),
+        }
     }
 }
 
@@ -333,7 +347,7 @@ fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
     eval(expr, copied_env, cont)
 }
 
-pub type Answer = Option<Value>;
+pub type Answer = Result<Value, EvalError>;
 
 #[derive(Clone)]
 pub struct Proc {
@@ -384,6 +398,6 @@ pub fn write(value: Value) -> CommCont {
 
     Rc::new(move |store: &mut Store| {
         println!("{}", fmt(store, &value));
-        Some(Unspecified)
+        Ok(Unspecified)
     })
 }
