@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Location(usize);
 
 pub type Env = Rc<RefCell<Environment>>;
@@ -19,12 +19,12 @@ impl Environment {
     }
 
     pub fn lookup(&self, ident: &str) -> Option<Location> {
-        self.inner.get(ident).copied()
+        self.inner.get(ident).cloned()
     }
 
-    pub fn extends(&mut self, pairs: &[(String, Location)]) {
+    pub fn extends(&mut self, pairs: Vec<(String, Location)>) {
         for (ident, location) in pairs {
-            self.inner.insert(ident.to_lowercase(), *location);
+            self.inner.insert(ident.to_lowercase(), location);
         }
     }
 }
@@ -35,7 +35,7 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn get(&self, location: Location) -> Option<&Value> {
+    pub fn get(&self, location: &Location) -> Option<&Value> {
         self.inner.get(location.0)?.as_ref()
     }
 
@@ -45,7 +45,7 @@ impl Store {
         location
     }
 
-    pub fn update(&mut self, location: Location, value: Value) {
+    pub fn update(&mut self, location: &Location, value: Value) {
         self.inner[location.0] = Some(value);
     }
 }

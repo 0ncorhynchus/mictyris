@@ -54,8 +54,8 @@ impl Engine {
 
     pub fn register(&mut self, variable: &str, value: Value) {
         let location = self.store.reserve();
+        self.store.update(&location, value);
         self.env.borrow_mut().insert(variable, location);
-        self.store.update(location, value);
     }
 
     pub fn register_proc<F: 'static>(&mut self, variable: &str, proc: F)
@@ -63,14 +63,14 @@ impl Engine {
         F: Fn(&[Value], ExprCont) -> CommCont,
     {
         let location = self.store.reserve();
-        self.env.borrow_mut().insert(variable, location);
         self.store.update(
-            location,
+            &location,
             Procedure(Proc {
-                location,
+                location: location.clone(),
                 inner: Rc::new(proc),
             }),
         );
+        self.env.borrow_mut().insert(variable, location);
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
@@ -217,9 +217,9 @@ fn eval_lambda(
                     let pairs: Vec<_> = args
                         .iter()
                         .cloned()
-                        .zip(locations.iter().copied())
+                        .zip(locations.iter().cloned())
                         .collect();
-                    env.borrow_mut().extends(&pairs);
+                    env.borrow_mut().extends(pairs);
 
                     let cont = eval(&expr, Rc::clone(&env), Rc::clone(&cont));
                     eval_commands(&commands, env, cont)
@@ -229,8 +229,8 @@ fn eval_lambda(
                 wrong("wrong number of arguments")
             }
         });
+        store.update(&location, Unspecified);
         let proc = Proc { location, inner };
-        store.update(location, Unspecified);
         send(Procedure(proc), Rc::clone(&cont))(store)
     })
 }
@@ -268,9 +268,9 @@ fn eval_lambda_dot(
                     let pairs: Vec<_> = args
                         .iter()
                         .cloned()
-                        .zip(locations.iter().copied())
+                        .zip(locations.iter().cloned())
                         .collect();
-                    env.borrow_mut().extends(&pairs);
+                    env.borrow_mut().extends(pairs);
 
                     let cont = eval(&expr, Rc::clone(&env), Rc::clone(&cont));
                     eval_commands(&commands, env, cont)
@@ -281,8 +281,8 @@ fn eval_lambda_dot(
             }
         });
 
+        store.update(&location, Unspecified);
         let proc = Proc { location, inner };
-        store.update(location, Unspecified);
         send(Procedure(proc), Rc::clone(&cont))(store)
     })
 }
@@ -394,7 +394,7 @@ where
 
 fn hold(location: Location, cont: ExprCont) -> CommCont {
     Rc::new(move |store: &mut Store| {
-        let cont = send(store.get(location)?.clone(), Rc::clone(&cont));
+        let cont = send(store.get(&location)?.clone(), Rc::clone(&cont));
         cont(store)
     })
 }
@@ -418,15 +418,16 @@ fn tievals(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value]) -> CommCont
             let f = Rc::clone(&f);
             Rc::new(move |store: &mut Store| {
                 let location = store.reserve();
+                let loc = location.clone();
                 let f = Rc::clone(&f);
                 let new_f = Rc::new(move |locations: &[Location]| {
                     let mut new_locs = Vec::with_capacity(locations.len() + 1);
-                    new_locs.push(location);
+                    new_locs.push(loc.clone());
                     new_locs.extend_from_slice(locations);
                     f(&new_locs)
                 });
 
-                store.update(location, head.clone());
+                store.update(&location, head.clone());
                 tievals(new_f, &tail)(store)
             })
         }
@@ -458,7 +459,7 @@ where
 
 fn assign(location: Location, value: Value, cont: CommCont) -> CommCont {
     Rc::new(move |store: &mut Store| {
-        store.update(location, value.clone());
+        store.update(&location, value.clone());
         cont(store)
     })
 }
@@ -470,11 +471,11 @@ pub fn write(value: Value) -> CommCont {
             Character(c) => format!("#\\{}", c),
             Number(n) => format!("{}", n),
             Pair(loc1, loc2, _) => {
-                let head = match store.get(*loc1) {
+                let head = match store.get(loc1) {
                     Some(val) => fmt(store, val),
                     None => "<not assigned>".to_string(),
                 };
-                let tail = match store.get(*loc2) {
+                let tail = match store.get(loc2) {
                     Some(val) => fmt(store, val),
                     None => "<not assigned>".to_string(),
                 };

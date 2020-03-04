@@ -20,9 +20,9 @@ pub fn cons(values: &[Value], cont: ExprCont) -> CommCont {
             let tail = tail.clone();
             Rc::new(move |store: &mut Store| {
                 let loc1 = store.reserve();
-                store.update(loc1, head.clone());
+                store.update(&loc1, head.clone());
                 let loc2 = store.reserve();
-                store.update(loc2, tail.clone());
+                store.update(&loc2, tail.clone());
                 send(Pair(loc1, loc2, true), Rc::clone(&cont))(store)
             })
         },
