@@ -1,11 +1,11 @@
 pub mod procedure;
+mod storage;
 
+use self::procedure::*;
+use self::storage::*;
 use crate::lexer::Identifier;
 use crate::parser::{Datum, Formals, Lit};
 use crate::pass::*;
-use procedure::*;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -54,10 +54,7 @@ impl Engine {
 
     pub fn register(&mut self, variable: &str, value: Value) {
         let location = self.store.reserve();
-        self.env
-            .borrow_mut()
-            .inner
-            .insert(variable.to_lowercase(), location);
+        self.env.borrow_mut().insert(variable, location);
         self.store.update(location, value);
     }
 
@@ -66,10 +63,7 @@ impl Engine {
         F: Fn(&[Value], ExprCont) -> CommCont,
     {
         let location = self.store.reserve();
-        self.env
-            .borrow_mut()
-            .inner
-            .insert(variable.to_lowercase(), location);
+        self.env.borrow_mut().insert(variable, location);
         self.store.update(
             location,
             Procedure(Proc {
@@ -351,49 +345,6 @@ fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
         assign(location, value, send(Unspecified, Rc::clone(&cont)))
     });
     eval(expr, copied_env, cont)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Location(usize);
-
-type Env = Rc<RefCell<Environment>>;
-
-#[derive(Default)]
-struct Environment {
-    inner: HashMap<String, Location>,
-}
-
-impl Environment {
-    fn lookup(&self, ident: &str) -> Option<Location> {
-        self.inner.get(ident).copied()
-    }
-
-    fn extends(&mut self, pairs: &[(String, Location)]) {
-        for (ident, location) in pairs {
-            self.inner.insert(ident.to_lowercase(), *location);
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct Store {
-    inner: Vec<Option<Value>>,
-}
-
-impl Store {
-    fn get(&self, location: Location) -> Option<&Value> {
-        self.inner.get(location.0)?.as_ref()
-    }
-
-    fn reserve(&mut self) -> Location {
-        let location = Location(self.inner.len());
-        self.inner.push(None);
-        location
-    }
-
-    fn update(&mut self, location: Location, value: Value) {
-        self.inner[location.0] = Some(value);
-    }
 }
 
 pub type Answer = Option<Value>;
