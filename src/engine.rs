@@ -65,10 +65,7 @@ impl Engine {
         let location = self.store.reserve();
         self.store.update(
             &location,
-            Procedure(Proc {
-                location: location.clone(),
-                inner: Rc::new(proc),
-            }),
+            Procedure(Proc::new(Rc::new(proc))),
         );
         self.env.borrow_mut().insert(variable, location);
     }
@@ -203,7 +200,6 @@ fn eval_lambda(
         let commands = commands.clone();
         let expr = expr.clone();
         let env = Rc::clone(&env);
-        let location = store.reserve();
 
         let inner = Rc::new(move |values: &[Value], cont: ExprCont| {
             let args = args.clone();
@@ -229,9 +225,11 @@ fn eval_lambda(
                 wrong("wrong number of arguments")
             }
         });
-        store.update(&location, Unspecified);
-        let proc = Proc { location, inner };
-        send(Procedure(proc), Rc::clone(&cont))(store)
+
+        // store.update(&store.reserve(), Unspecified);
+
+        let proc = Procedure(Proc::new(inner));
+        send(proc, Rc::clone(&cont))(store)
     })
 }
 
@@ -281,9 +279,10 @@ fn eval_lambda_dot(
             }
         });
 
-        store.update(&location, Unspecified);
-        let proc = Proc { location, inner };
-        send(Procedure(proc), Rc::clone(&cont))(store)
+        // store.update(&location, Unspecified);
+
+        let proc = Procedure(Proc::new(inner));
+        send(proc, Rc::clone(&cont))(store)
     })
 }
 
@@ -351,19 +350,24 @@ pub type Answer = Option<Value>;
 
 #[derive(Clone)]
 pub struct Proc {
-    location: Location,
     inner: Rc<dyn Fn(&[Value], ExprCont) -> CommCont>,
+}
+
+impl Proc {
+    fn new(inner: Rc<dyn Fn(&[Value], ExprCont) -> CommCont>) -> Self {
+        Self { inner }
+    }
 }
 
 impl fmt::Debug for Proc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Proc {{ location: {:?} }}", self.location)
+        write!(f, "Proc")
     }
 }
 
 impl PartialEq for Proc {
     fn eq(&self, other: &Self) -> bool {
-        self.location == other.location
+        Rc::ptr_eq(&self.inner, &other.inner)
     }
 }
 
