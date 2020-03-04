@@ -9,12 +9,6 @@ use std::io::{self, Write};
 fn main() -> io::Result<()> {
     let mut engine = engine::Engine::new();
     engine.register("pi", Number(std::f64::consts::PI));
-    engine.register_proc("print", |values| {
-        let strings: Vec<_> = values.iter().map(|v| v.to_string()).collect();
-        let strings = strings.join(" ");
-        println!("{}", strings);
-        Unspecified
-    });
 
     loop {
         print!("mictyris> ");

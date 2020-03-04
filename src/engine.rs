@@ -1,11 +1,13 @@
+pub mod procedure;
+
 use crate::lexer::Identifier;
 use crate::parser::{Datum, Formals, Lit};
 use crate::pass::*;
+use procedure::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-
 use std::fmt;
+use std::rc::Rc;
 
 use Value::*;
 
@@ -24,6 +26,15 @@ pub enum Value {
     Unspecified,
 
     Procedure(Proc),
+}
+
+impl Value {
+    pub fn number(&self) -> Option<f64> {
+        match self {
+            Number(num) => Some(*num),
+            _ => None
+        }
+    }
 }
 
 impl fmt::Display for Value {
@@ -51,7 +62,11 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
-        Self::default()
+        let mut engine = Self::default();
+        engine.register_proc("list", procedure::list);
+        engine.register_proc("cons", procedure::cons);
+        engine.register_proc("<", procedure::less);
+        engine
     }
 
     pub fn register(&mut self, variable: &str, value: Value) {
@@ -65,24 +80,20 @@ impl Engine {
 
     pub fn register_proc<F: 'static>(&mut self, variable: &str, proc: F)
     where
-        F: Fn(&[Value]) -> Value,
+        F: Fn(&[Value], ExprCont) -> CommCont,
     {
         let location = self.store.reserve();
         self.env
             .borrow_mut()
             .inner
             .insert(variable.to_lowercase(), location);
-        let inner = Rc::new(move |values: &[Value], cont: ExprCont| {
-            let retval = proc(values);
-            let cont: CommCont = Rc::new(move |store: &mut Store| {
-                let cont = Rc::clone(&cont);
-                cont(vec![retval.clone()])(store)
-            });
-            cont
-        });
-
-        self.store
-            .update(location, Procedure(Proc { location, inner }));
+        self.store.update(
+            location,
+            Procedure(Proc {
+                location,
+                inner: Rc::new(proc),
+            }),
+        );
     }
 
     pub fn eval(&mut self, ast: &AST) -> Answer {
@@ -498,37 +509,6 @@ fn tievalsrest(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value], n: usiz
             rest.push(value);
             tievals(Rc::clone(&f), &rest)
         }),
-    )
-}
-
-fn list(values: &[Value], cont: ExprCont) -> CommCont {
-    match values.split_first() {
-        Some((head, tail)) => {
-            let head = head.clone();
-            list(
-                tail,
-                single(move |value| cons(&[head.clone(), value], Rc::clone(&cont))),
-            )
-        }
-        None => send(Null, cont),
-    }
-}
-
-fn cons(values: &[Value], cont: ExprCont) -> CommCont {
-    twoarg(
-        |head, tail, cont| {
-            let head = head.clone();
-            let tail = tail.clone();
-            Rc::new(move |store: &mut Store| {
-                let loc1 = store.reserve();
-                store.update(loc1, head.clone());
-                let loc2 = store.reserve();
-                store.update(loc2, tail.clone());
-                send(Pair(loc1, loc2, true), Rc::clone(&cont))(store)
-            })
-        },
-        values,
-        cont,
     )
 }
 
