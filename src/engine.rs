@@ -208,14 +208,7 @@ fn eval_lambda(
             if values.len() == args.len() {
                 let env = Rc::clone(&env);
                 let f = Rc::new(move |locations: &[Location]| {
-                    let env = Rc::clone(&env);
-                    let pairs: Vec<_> = args
-                        .iter()
-                        .cloned()
-                        .zip(locations.iter().cloned())
-                        .collect();
-                    env.borrow_mut().extends(pairs);
-
+                    let env = extends(&env, &args, &locations);
                     let cont = eval(&expr, Rc::clone(&env), Rc::clone(&cont));
                     eval_commands(&commands, env, cont)
                 });
@@ -261,14 +254,7 @@ fn eval_lambda_dot(
             if values.len() >= min_args {
                 let env = Rc::clone(&env);
                 let f = Rc::new(move |locations: &[Location]| {
-                    let env = Rc::clone(&env);
-                    let pairs: Vec<_> = args
-                        .iter()
-                        .cloned()
-                        .zip(locations.iter().cloned())
-                        .collect();
-                    env.borrow_mut().extends(pairs);
-
+                    let env = extends(&env, &args, &locations);
                     let cont = eval(&expr, Rc::clone(&env), Rc::clone(&cont));
                     eval_commands(&commands, env, cont)
                 });
