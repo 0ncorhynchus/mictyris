@@ -1,5 +1,4 @@
 use crate::lexer::*;
-use std::iter::Peekable;
 
 use Expr::*;
 
@@ -49,14 +48,60 @@ pub enum Formals {
     Dot(Vec<String>, String),
 }
 
+pub struct Lookahead<I>
+where
+    I: Iterator,
+{
+    inner: I,
+    first: Option<I::Item>,
+    second: Option<I::Item>,
+}
+
+impl<I> Lookahead<I>
+where
+    I: Iterator,
+{
+    pub fn new(mut inner: I) -> Self {
+        let first = inner.next();
+        let second = inner.next();
+        Self {
+            inner,
+            first,
+            second,
+        }
+    }
+
+    pub fn first(&self) -> Option<&I::Item> {
+        self.first.as_ref()
+    }
+
+    pub fn second(&self) -> Option<&I::Item> {
+        self.second.as_ref()
+    }
+}
+
+impl<I> Iterator for Lookahead<I>
+where
+    I: Iterator,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut retval = self.inner.next();
+        std::mem::swap(&mut retval, &mut self.first);
+        std::mem::swap(&mut self.first, &mut self.second);
+        retval
+    }
+}
+
 pub struct Parser<'a> {
-    lexer: Peekable<Lexer<'a>>,
+    lexer: Lookahead<Lexer<'a>>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
-            lexer: Lexer::new(input).peekable(),
+            lexer: Lookahead::new(Lexer::new(input)),
         }
     }
 
@@ -68,7 +113,7 @@ impl<'a> Parser<'a> {
             TokenKind::Number(num) => Some(Literal(Lit::Number(num))),
             TokenKind::Character(c) => Some(Literal(Lit::Character(c))),
             TokenKind::Str(s) => Some(Literal(Lit::Str(s))),
-            TokenKind::OpenParen => match self.lexer.peek()?.kind.ident() {
+            TokenKind::OpenParen => match self.lexer.first()?.kind.ident() {
                 Some(Identifier::Lambda) => self.parse_lambda(),
                 Some(Identifier::If) => self.parse_conditional(),
                 Some(Identifier::Set) => self.parse_assign(),
@@ -80,7 +125,7 @@ impl<'a> Parser<'a> {
     }
 
     fn eat_close_paren(&mut self) -> bool {
-        if let Some(tok) = self.lexer.peek() {
+        if let Some(tok) = self.lexer.first() {
             if tok.kind == TokenKind::CloseParen {
                 self.lexer.next();
                 return true;
@@ -135,7 +180,7 @@ impl<'a> Parser<'a> {
     fn parse_body(&mut self) -> Option<Vec<Expr>> {
         // TODO: parse definitions
         let mut exprs = Vec::new();
-        while let Some(tok) = self.lexer.peek() {
+        while let Some(tok) = self.lexer.first() {
             if tok.kind == TokenKind::CloseParen {
                 if exprs.is_empty() {
                     return None;
@@ -220,7 +265,7 @@ impl<'a> Parser<'a> {
 
     fn parse_list(&mut self) -> Option<Datum> {
         let mut data = Vec::new();
-        while let Some(tok) = self.lexer.peek() {
+        while let Some(tok) = self.lexer.first() {
             match tok.kind {
                 TokenKind::CloseParen => {
                     self.lexer.next();
@@ -258,6 +303,28 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_lookahead() {
+        let xs = [1, 2, 3];
+        let mut iter = Lookahead::new(xs.iter());
+
+        assert_eq!(iter.first(), Some(&&1));
+        assert_eq!(iter.second(), Some(&&2));
+        assert_eq!(iter.next(), Some(&1));
+
+        assert_eq!(iter.first(), Some(&&2));
+        assert_eq!(iter.second(), Some(&&3));
+        assert_eq!(iter.next(), Some(&2));
+
+        assert_eq!(iter.first(), Some(&&3));
+        assert_eq!(iter.second(), None);
+        assert_eq!(iter.next(), Some(&3));
+
+        assert_eq!(iter.first(), None);
+        assert_eq!(iter.second(), None);
+        assert_eq!(iter.next(), None);
+    }
 
     #[test]
     fn test_call_lambda() {
