@@ -42,9 +42,63 @@ pub fn less(values: &[Value], cont: ExprCont) -> CommCont {
                 Some(num) => num,
                 None => return wrong("non-numeric argument"),
             };
-            send(Bool(lhs < rhs), Rc::clone(&cont))
+            send(Bool(lhs < rhs), cont)
         },
         values,
         cont,
     )
+}
+
+pub fn add(values: &[Value], cont: ExprCont) -> CommCont {
+    let mut args = Vec::with_capacity(values.len());
+    for v in values {
+        match v.number() {
+            Some(num) => args.push(num),
+            None => return wrong("non-numeric argument"),
+        }
+    }
+    send(Number(args.into_iter().sum()), cont)
+}
+
+pub fn car(values: &[Value], cont: ExprCont) -> CommCont {
+    onearg(
+        |arg, cont| match arg.pair() {
+            Some((car, _, _)) => hold(car, cont),
+            None => wrong("non-pair argument"),
+        },
+        values,
+        cont,
+    )
+}
+
+pub fn cdr(values: &[Value], cont: ExprCont) -> CommCont {
+    onearg(
+        |arg, cont| match arg.pair() {
+            Some((_, cdr, _)) => hold(cdr, cont),
+            None => wrong("non-pair argument"),
+        },
+        values,
+        cont,
+    )
+}
+
+pub fn setcar(values: &[Value], cont: ExprCont) -> CommCont {
+    twoarg(
+        |pair, value, cont| match pair.pair() {
+            Some((car, _, mutable)) => {
+                if mutable {
+                    assign(car, value.clone(), send(Unspecified, cont))
+                } else {
+                    wrong("immutable argument")
+                }
+            }
+            None => wrong("non-pair argument"),
+        },
+        values,
+        cont,
+    )
+}
+
+pub fn eqv(values: &[Value], cont: ExprCont) -> CommCont {
+    twoarg(|lhs, rhs, cont| send(Bool(lhs == rhs), cont), values, cont)
 }

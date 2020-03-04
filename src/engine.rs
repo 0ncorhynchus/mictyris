@@ -38,6 +38,13 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn pair(&self) -> Option<(Location, Location, bool)> {
+        match self {
+            Pair(car, cdr, mutable) => Some((car.clone(), cdr.clone(), *mutable)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -63,6 +70,11 @@ impl Engine {
         engine.register_proc("list", procedure::list);
         engine.register_proc("cons", procedure::cons);
         engine.register_proc("<", procedure::less);
+        engine.register_proc("+", procedure::add);
+        engine.register_proc("car", procedure::car);
+        engine.register_proc("cdr", procedure::cdr);
+        engine.register_proc("set-car!", procedure::setcar);
+        engine.register_proc("eqv?", procedure::eqv);
         engine
     }
 

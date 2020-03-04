@@ -97,6 +97,16 @@ pub fn applicate(f: &Value, args: &[Value], cont: ExprCont) -> CommCont {
     }
 }
 
+pub fn onearg<F: 'static>(f: F, values: &[Value], cont: ExprCont) -> CommCont
+where
+    F: Fn(&Value, ExprCont) -> CommCont,
+{
+    match values {
+        [arg] => f(arg, cont),
+        _ => wrong("wrong number of arguments"),
+    }
+}
+
 pub fn twoarg<F: 'static>(f: F, values: &[Value], cont: ExprCont) -> CommCont
 where
     F: Fn(&Value, &Value, ExprCont) -> CommCont,
