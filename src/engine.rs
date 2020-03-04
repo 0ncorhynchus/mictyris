@@ -6,7 +6,7 @@ use self::auxiliary::*;
 use self::procedure::*;
 use self::storage::*;
 use crate::lexer::Identifier;
-use crate::parser::{Datum, Formals, Lit};
+use crate::parser::{Datum, Formals, ListDatum, Lit};
 use crate::pass::*;
 use std::fmt;
 use std::rc::Rc;
@@ -140,29 +140,55 @@ fn eval(ast: &AST, env: Env, expr_cont: ExprCont) -> CommCont {
 }
 
 fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
-    fn literal(lit: &Lit) -> Value {
+    fn literal(store: &mut Store, lit: &Lit) -> Value {
         match lit {
             Lit::Bool(b) => Bool(*b),
             Lit::Number(n) => Number(*n),
             Lit::Character(c) => Character(*c),
             Lit::Str(s) => Str(s.clone()),
-            Lit::Quote(d) => datum(d),
+            Lit::Quote(d) => eval_datum(store, d),
         }
     }
 
-    fn datum(datum: &Datum) -> Value {
+    fn eval_datum(store: &mut Store, datum: &Datum) -> Value {
         match datum {
             Datum::Bool(b) => Bool(*b),
             Datum::Number(n) => Number(*n),
             Datum::Character(c) => Character(*c),
             Datum::Str(s) => Str(s.clone()),
             Datum::Symbol(ident) => Symbol(ident.clone()),
-            Datum::List(_) => unimplemented!(),
+            Datum::List(data) => match data {
+                ListDatum::List(data) => data.iter().rev().fold(Null, |acc, x| {
+                    let cdr = store.reserve();
+                    store.update(&cdr, acc);
+
+                    let car = store.reserve();
+                    let x = eval_datum(store, x);
+                    store.update(&car, x);
+
+                    Pair(car, cdr, true)
+                }),
+                ListDatum::Cons(data, last) => {
+                    let last = eval_datum(store, last);
+                    data.iter().rev().fold(last, |acc, x| {
+                        let cdr = store.reserve();
+                        store.update(&cdr, acc);
+
+                        let car = store.reserve();
+                        let x = eval_datum(store, x);
+                        store.update(&car, x);
+
+                        Pair(car, cdr, true)
+                    })
+                }
+                ListDatum::Abbrev(_) => unimplemented!(),
+            },
             Datum::Vector(_) => Vector,
         }
     }
 
-    send(literal(lit), expr_cont)
+    let lit = lit.clone();
+    Rc::new(move |store| send(literal(store, &lit), Rc::clone(&expr_cont))(store))
 }
 
 fn eval_variable(ident: &str, env: Env, expr_cont: ExprCont) -> CommCont {
