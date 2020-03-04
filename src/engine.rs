@@ -32,24 +32,7 @@ impl Value {
     pub fn number(&self) -> Option<f64> {
         match self {
             Number(num) => Some(*num),
-            _ => None
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Symbol(ident) => write!(f, "{}", ident),
-            Character(c) => write!(f, "#\\{}", c),
-            Number(n) => write!(f, "{}", n),
-            Pair(_, _, _) => write!(f, ""),
-            Vector => write!(f, ""),
-            Str(s) => write!(f, "{}", s),
-            Bool(b) => write!(f, "{}", b),
-            Null => write!(f, "()"),
-            Unspecified => write!(f, "<unspecified>"),
-            Procedure(_) => write!(f, "<procedure>"),
+            _ => None,
         }
     }
 }
@@ -546,12 +529,12 @@ pub fn write(value: Value) -> CommCont {
                 };
                 format!("({} . {})", head, tail)
             }
-            Vector => format!(""),
-            Str(s) => format!("{}", s),
+            Vector => "".to_string(),
+            Str(s) => s.clone(),
             Bool(b) => format!("{}", b),
-            Null => format!("()"),
-            Unspecified => format!("<unspecified>"),
-            Procedure(_) => format!("<procedure>"),
+            Null => "()".to_string(),
+            Unspecified => "<unspecified>".to_string(),
+            Procedure(_) => "<procedure>".to_string(),
         }
     }
 
