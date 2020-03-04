@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Location(usize);
+pub struct Location(Rc<RefCell<Value>>);
 
 pub type Env = Rc<RefCell<Environment>>;
 
@@ -30,22 +30,18 @@ impl Environment {
 }
 
 #[derive(Default)]
-pub struct Store {
-    inner: Vec<Value>,
-}
+pub struct Store;
 
 impl Store {
     pub fn get(&self, location: &Location) -> Value {
-        self.inner.get(location.0).unwrap().clone()
+        location.0.borrow().clone()
     }
 
     pub fn reserve(&mut self) -> Location {
-        let location = Location(self.inner.len());
-        self.inner.push(Value::Undefined);
-        location
+        Location(Rc::new(RefCell::new(Value::Undefined)))
     }
 
     pub fn update(&mut self, location: &Location, value: Value) {
-        self.inner[location.0] = value;
+        *location.0.borrow_mut() = value;
     }
 }
