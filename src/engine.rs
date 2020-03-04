@@ -19,7 +19,7 @@ pub enum Value {
     Character(char),
     Number(f64),
     Pair(Location, Location, bool),
-    Vector,
+    Vector(Vec<Location>),
     Str(String),
     Bool(bool),
 
@@ -183,7 +183,16 @@ fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
                 }
                 ListDatum::Abbrev(_) => unimplemented!(),
             },
-            Datum::Vector(_) => Vector,
+            Datum::Vector(data) => {
+                let mut locations = Vec::with_capacity(data.len());
+                for elem in data {
+                    let elem = eval_datum(store, elem);
+                    let loc = store.reserve();
+                    store.update(&loc, elem);
+                    locations.push(loc);
+                }
+                Vector(locations)
+            }
         }
     }
 
@@ -424,7 +433,13 @@ pub fn write(value: Value) -> CommCont {
                 fmt(store, &store.get(loc1)),
                 fmt(store, &store.get(loc2)),
             ),
-            Vector => "".to_string(),
+            Vector(locations) => {
+                let mut strings = Vec::with_capacity(locations.len());
+                for loc in locations {
+                    strings.push(fmt(store, &store.get(loc)));
+                }
+                format!("#({})", strings.join(" "))
+            }
             Str(s) => s.clone(),
             Bool(b) => format!("{}", b),
             Null => "()".to_string(),
