@@ -7,7 +7,7 @@ pub enum Expr {
     Variable(String),                              // variable
     Literal(Lit),                                  // literal
     ProcCall(Box<Expr>, Vec<Expr>),                // procedure call
-    Lambda(Formals, Vec<Expr>),                    // lambda expression
+    Lambda(Formals, Vec<Def>, Vec<Expr>),          // lambda expression
     Cond(Box<Expr>, Box<Expr>, Option<Box<Expr>>), // conditional
     Assignment(String, Box<Expr>),                 // assignment
     Derived,                                       // derived expression
@@ -46,6 +46,25 @@ pub enum ListDatum {
 pub enum Formals {
     List(Vec<String>),
     Dot(Vec<String>, String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Def {
+    Variable(String, Box<Expr>),
+}
+
+impl Def {
+    pub fn get_var(&self) -> &str {
+        match self {
+            Self::Variable(var, _) => var,
+        }
+    }
+
+    pub fn get_expr(&self) -> &Expr {
+        match self {
+            Self::Variable(_, expr) => expr,
+        }
+    }
 }
 
 pub struct Lookahead<I>
@@ -137,9 +156,9 @@ impl<'a> Parser<'a> {
     fn parse_lambda(&mut self) -> Option<Expr> {
         self.lexer.next();
         let formals = self.parse_formals()?;
-        let body = self.parse_body()?;
+        let (defs, body) = self.parse_body()?;
         if self.eat_close_paren() {
-            Some(Lambda(formals, body))
+            Some(Lambda(formals, defs, body))
         } else {
             None
         }
@@ -177,21 +196,47 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_body(&mut self) -> Option<Vec<Expr>> {
-        // TODO: parse definitions
+    fn parse_body(&mut self) -> Option<(Vec<Def>, Vec<Expr>)> {
+        let mut defs = vec![];
+        while let Some(tok) = self.lexer.first() {
+            if tok.kind != TokenKind::OpenParen {
+                break;
+            }
+
+            if let Some(tok) = self.lexer.second() {
+                if tok.kind.ident() == Some(&Identifier::Define) {
+                    defs.push(self.parse_define()?);
+                    continue;
+                }
+            }
+            break;
+        }
+
         let mut exprs = Vec::new();
         while let Some(tok) = self.lexer.first() {
             if tok.kind == TokenKind::CloseParen {
                 if exprs.is_empty() {
                     return None;
                 } else {
-                    return Some(exprs);
+                    return Some((defs, exprs));
                 }
             } else {
                 exprs.push(self.parse()?);
             }
         }
         None
+    }
+
+    fn parse_define(&mut self) -> Option<Def> {
+        self.lexer.next(); // eat '('
+        self.lexer.next(); // eat "define"
+        let var = self.lexer.next()?.kind.ident()?.var()?;
+        let expr = Box::new(self.parse()?);
+        if self.eat_close_paren() {
+            Some(Def::Variable(var, expr))
+        } else {
+            None
+        }
     }
 
     fn parse_conditional(&mut self) -> Option<Expr> {
@@ -333,6 +378,7 @@ mod tests {
         let answer = ProcCall(
             Box::new(Lambda(
                 Formals::List(vec!["x".to_string()]),
+                vec![],
                 vec![Variable("x".to_string())],
             )),
             vec![Literal(Lit::Bool(true))],

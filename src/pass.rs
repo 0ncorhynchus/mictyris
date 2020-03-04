@@ -19,10 +19,19 @@ pub fn pass(expr: &Expr) -> Option<AST> {
             let operands = operands.iter().map(pass).collect::<Option<Vec<_>>>()?;
             Some(AST::Call(operator, operands))
         }
-        Expr::Lambda(formals, body) => {
+        Expr::Lambda(formals, defs, body) => {
+            let inner_formals =
+                Formals::List(defs.iter().map(|d| d.get_var().to_string()).collect());
             let mut commands = body.iter().map(pass).collect::<Option<Vec<_>>>()?;
             let expr = Box::new(commands.pop()?);
-            Some(AST::Lambda(formals.clone(), commands, expr))
+            let inner = AST::Lambda(inner_formals, commands, expr);
+
+            let mut args = Vec::with_capacity(defs.len());
+            for d in defs {
+                args.push(pass(d.get_expr())?);
+            }
+            let expr = AST::Call(Box::new(inner), args);
+            Some(AST::Lambda(formals.clone(), vec![], Box::new(expr)))
         }
         Expr::Cond(test, consequent, alternate) => {
             let test = Box::new(pass(test)?);
