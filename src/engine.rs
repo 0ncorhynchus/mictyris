@@ -197,7 +197,7 @@ fn eval_literal(lit: &Lit, expr_cont: ExprCont) -> CommCont {
     }
 
     let lit = lit.clone();
-    Rc::new(move |store| send(literal(store, &lit), Rc::clone(&expr_cont))(store))
+    Rc::new(move |store| send(literal(store, &lit), &expr_cont)(store))
 }
 
 fn eval_variable(ident: &str, env: Env, expr_cont: ExprCont) -> CommCont {
@@ -207,7 +207,7 @@ fn eval_variable(ident: &str, env: Env, expr_cont: ExprCont) -> CommCont {
             return wrong("undefined variable");
         }
     };
-    let cont = single(move |value| send(value, Rc::clone(&expr_cont)));
+    let cont = single(move |value| send(value, &expr_cont));
     hold(location, cont)
 }
 
@@ -236,10 +236,10 @@ fn eval_list(exprs: &[AST], env: Env, cont: ExprCont) -> CommCont {
 
                 let cont: ExprCont = Rc::new(move |mut values| {
                     values.insert(0, value.clone());
-                    Rc::clone(&cont)(values)
+                    cont(values)
                 });
 
-                eval_list(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
+                eval_list(&tail, Rc::clone(&copied_env), cont)
             });
 
             eval(head, env, cont)
@@ -284,7 +284,7 @@ fn eval_lambda(
         // store.update(&store.reserve(), Unspecified);
 
         let proc = Procedure(Proc::new(inner));
-        send(proc, Rc::clone(&cont))(store)
+        send(proc, &cont)(store)
     })
 }
 
@@ -330,7 +330,7 @@ fn eval_lambda_dot(
         // store.update(&location, Unspecified);
 
         let proc = Procedure(Proc::new(inner));
-        send(proc, Rc::clone(&cont))(store)
+        send(proc, &cont)(store)
     })
 }
 
@@ -342,7 +342,7 @@ fn eval_commands(commands: &[AST], env: Env, cont: CommCont) -> CommCont {
             let cont = Rc::new(move |_: Vec<Value>| {
                 eval_commands(&tail, Rc::clone(&copied_env), Rc::clone(&cont))
             });
-            eval(head, Rc::clone(&env), cont)
+            eval(head, env, cont)
         }
         None => cont,
     }
@@ -368,12 +368,10 @@ fn eval_conditional2(test: &AST, conseq: &AST, env: Env, cont: ExprCont) -> Comm
     let conseq = conseq.clone();
     let copied_env = Rc::clone(&env);
     let cont = single(move |value| {
-        let cont = Rc::clone(&cont);
-        let env = Rc::clone(&copied_env);
         if truish(value) {
-            eval(&conseq.clone(), env, cont)
+            eval(&conseq.clone(), Rc::clone(&copied_env), Rc::clone(&cont))
         } else {
-            send(Unspecified, cont)
+            send(Unspecified, &cont)
         }
     });
     eval(test, env, cont)
@@ -389,7 +387,7 @@ fn eval_assign(ident: &str, expr: &AST, env: Env, cont: ExprCont) -> CommCont {
                 return wrong("undefined variable");
             }
         };
-        assign(location, value, send(Unspecified, Rc::clone(&cont)))
+        assign(location, value, send(Unspecified, &cont))
     });
     eval(expr, copied_env, cont)
 }

@@ -9,7 +9,7 @@ pub fn list(values: &[Value], cont: ExprCont) -> CommCont {
                 single(move |value| cons(&[head.clone(), value], Rc::clone(&cont))),
             )
         }
-        None => send(Null, cont),
+        None => send(Null, &cont),
     }
 }
 
@@ -23,7 +23,7 @@ pub fn cons(values: &[Value], cont: ExprCont) -> CommCont {
                 store.update(&loc1, head.clone());
                 let loc2 = store.reserve();
                 store.update(&loc2, tail.clone());
-                send(Pair(loc1, loc2, true), Rc::clone(&cont))(store)
+                send(Pair(loc1, loc2, true), &cont)(store)
             })
         },
         values,
@@ -42,7 +42,7 @@ pub fn less(values: &[Value], cont: ExprCont) -> CommCont {
                 Some(num) => num,
                 None => return wrong("non-numeric argument"),
             };
-            send(Bool(lhs < rhs), cont)
+            send(Bool(lhs < rhs), &cont)
         },
         values,
         cont,
@@ -57,7 +57,7 @@ pub fn add(values: &[Value], cont: ExprCont) -> CommCont {
             None => return wrong("non-numeric argument"),
         }
     }
-    send(Number(args.into_iter().sum()), cont)
+    send(Number(args.into_iter().sum()), &cont)
 }
 
 pub fn car(values: &[Value], cont: ExprCont) -> CommCont {
@@ -87,7 +87,7 @@ pub fn setcar(values: &[Value], cont: ExprCont) -> CommCont {
         |pair, value, cont| match pair.pair() {
             Some((car, _, mutable)) => {
                 if mutable {
-                    assign(car, value.clone(), send(Unspecified, cont))
+                    assign(car, value.clone(), send(Unspecified, &cont))
                 } else {
                     wrong("immutable argument")
                 }
@@ -100,5 +100,5 @@ pub fn setcar(values: &[Value], cont: ExprCont) -> CommCont {
 }
 
 pub fn eqv(values: &[Value], cont: ExprCont) -> CommCont {
-    twoarg(|lhs, rhs, cont| send(Bool(lhs == rhs), cont), values, cont)
+    twoarg(|lhs, rhs, cont| send(Bool(lhs == rhs), &cont), values, cont)
 }

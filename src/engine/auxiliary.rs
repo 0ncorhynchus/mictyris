@@ -18,7 +18,7 @@ pub fn wrong(message: &'static str) -> CommCont {
     Rc::new(move |_| Err(err.clone()))
 }
 
-pub fn send(value: Value, cont: ExprCont) -> CommCont {
+pub fn send(value: Value, cont: &ExprCont) -> CommCont {
     cont(vec![value])
 }
 
@@ -37,7 +37,7 @@ where
 
 pub fn hold(location: Location, cont: ExprCont) -> CommCont {
     Rc::new(move |store: &mut Store| {
-        let cont = send(store.get(&location), Rc::clone(&cont));
+        let cont = send(store.get(&location), &cont);
         cont(store)
     })
 }
