@@ -34,15 +34,6 @@ impl Environment {
     }
 }
 
-pub fn extends(root: &Env, args: &[String], locations: &[Location]) -> Env {
-    let mut env = Environment::make_scope(Rc::clone(root));
-    let itr = args.iter().zip(locations.iter().cloned());
-    for (ident, location) in itr {
-        env.inner.insert(ident.to_lowercase(), location);
-    }
-    Rc::new(RefCell::new(env))
-}
-
 #[derive(Default)]
 pub struct Store;
 

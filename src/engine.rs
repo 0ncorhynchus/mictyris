@@ -1,6 +1,8 @@
+mod auxiliary;
 pub mod procedure;
 mod storage;
 
+use self::auxiliary::*;
 use self::procedure::*;
 use self::storage::*;
 use crate::lexer::Identifier;
@@ -358,100 +360,6 @@ impl PartialEq for Proc {
 
 pub type CommCont = Rc<dyn Fn(&mut Store) -> Answer>;
 pub type ExprCont = Rc<dyn Fn(Vec<Value>) -> CommCont>;
-
-fn send(value: Value, cont: ExprCont) -> CommCont {
-    cont(vec![value])
-}
-
-fn wrong(message: &'static str) -> CommCont {
-    eprintln!("{}", message);
-    Rc::new(|_store: &mut Store| None)
-}
-
-fn single<F: 'static>(f: F) -> ExprCont
-where
-    F: Fn(Value) -> CommCont,
-{
-    Rc::new(move |mut values| {
-        if values.len() == 1 {
-            f(values.pop().unwrap())
-        } else {
-            wrong("wrong number of return values")
-        }
-    })
-}
-
-fn hold(location: Location, cont: ExprCont) -> CommCont {
-    Rc::new(move |store: &mut Store| {
-        let cont = send(store.get(&location), Rc::clone(&cont));
-        cont(store)
-    })
-}
-
-fn truish(value: Value) -> bool {
-    value != Bool(false)
-}
-
-fn applicate(f: &Value, args: &[Value], cont: ExprCont) -> CommCont {
-    match f {
-        Procedure(proc) => (proc.inner)(args, cont),
-        _ => wrong("bad procedure"),
-    }
-}
-
-fn tievals(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value]) -> CommCont {
-    match values.split_first() {
-        Some((head, tail)) => {
-            let head = head.clone();
-            let tail = tail.to_vec();
-            let f = Rc::clone(&f);
-            Rc::new(move |store: &mut Store| {
-                let location = store.reserve();
-                let loc = location.clone();
-                let f = Rc::clone(&f);
-                let new_f = Rc::new(move |locations: &[Location]| {
-                    let mut new_locs = Vec::with_capacity(locations.len() + 1);
-                    new_locs.push(loc.clone());
-                    new_locs.extend_from_slice(locations);
-                    f(&new_locs)
-                });
-
-                store.update(&location, head.clone());
-                tievals(new_f, &tail)(store)
-            })
-        }
-        None => f(&[]),
-    }
-}
-
-fn tievalsrest(f: Rc<dyn Fn(&[Location]) -> CommCont>, values: &[Value], n: usize) -> CommCont {
-    let rest = values[..n].to_vec();
-    list(
-        &values[n..],
-        single(move |value| {
-            let mut rest = rest.clone();
-            rest.push(value);
-            tievals(Rc::clone(&f), &rest)
-        }),
-    )
-}
-
-fn twoarg<F: 'static>(f: F, values: &[Value], cont: ExprCont) -> CommCont
-where
-    F: Fn(&Value, &Value, ExprCont) -> CommCont,
-{
-    match values {
-        [arg1, arg2] => f(arg1, arg2, cont),
-        _ => wrong("wrong number of arguments"),
-    }
-}
-
-fn assign(location: Location, value: Value, cont: CommCont) -> CommCont {
-    Rc::new(move |store: &mut Store| {
-        store.update(&location, value.clone());
-        cont(store)
-    })
-}
 
 pub fn write(value: Value) -> CommCont {
     fn fmt(store: &Store, value: &Value) -> String {
