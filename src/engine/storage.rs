@@ -31,21 +31,21 @@ impl Environment {
 
 #[derive(Default)]
 pub struct Store {
-    inner: Vec<Option<Value>>,
+    inner: Vec<Value>,
 }
 
 impl Store {
-    pub fn get(&self, location: &Location) -> Option<&Value> {
-        self.inner.get(location.0)?.as_ref()
+    pub fn get(&self, location: &Location) -> Value {
+        self.inner.get(location.0).unwrap().clone()
     }
 
     pub fn reserve(&mut self) -> Location {
         let location = Location(self.inner.len());
-        self.inner.push(None);
+        self.inner.push(Value::Undefined);
         location
     }
 
     pub fn update(&mut self, location: &Location, value: Value) {
-        self.inner[location.0] = Some(value);
+        self.inner[location.0] = value;
     }
 }

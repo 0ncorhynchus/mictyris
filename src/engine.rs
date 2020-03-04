@@ -24,6 +24,7 @@ pub enum Value {
     // Miscellaneous
     Null,
     Unspecified,
+    Undefined,
 
     Procedure(Proc),
 }
@@ -63,10 +64,8 @@ impl Engine {
         F: Fn(&[Value], ExprCont) -> CommCont,
     {
         let location = self.store.reserve();
-        self.store.update(
-            &location,
-            Procedure(Proc::new(Rc::new(proc))),
-        );
+        self.store
+            .update(&location, Procedure(Proc::new(Rc::new(proc))));
         self.env.borrow_mut().insert(variable, location);
     }
 
@@ -398,7 +397,7 @@ where
 
 fn hold(location: Location, cont: ExprCont) -> CommCont {
     Rc::new(move |store: &mut Store| {
-        let cont = send(store.get(&location)?.clone(), Rc::clone(&cont));
+        let cont = send(store.get(&location), Rc::clone(&cont));
         cont(store)
     })
 }
@@ -474,22 +473,17 @@ pub fn write(value: Value) -> CommCont {
             Symbol(ident) => format!("{}", ident),
             Character(c) => format!("#\\{}", c),
             Number(n) => format!("{}", n),
-            Pair(loc1, loc2, _) => {
-                let head = match store.get(loc1) {
-                    Some(val) => fmt(store, val),
-                    None => "<not assigned>".to_string(),
-                };
-                let tail = match store.get(loc2) {
-                    Some(val) => fmt(store, val),
-                    None => "<not assigned>".to_string(),
-                };
-                format!("({} . {})", head, tail)
-            }
+            Pair(loc1, loc2, _) => format!(
+                "({} . {})",
+                fmt(store, &store.get(loc1)),
+                fmt(store, &store.get(loc2)),
+            ),
             Vector => "".to_string(),
             Str(s) => s.clone(),
             Bool(b) => format!("{}", b),
             Null => "()".to_string(),
             Unspecified => "<unspecified>".to_string(),
+            Undefined => "<undefined>".to_string(),
             Procedure(_) => "<procedure>".to_string(),
         }
     }
