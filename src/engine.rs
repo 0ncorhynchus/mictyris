@@ -75,6 +75,11 @@ impl Engine {
         engine.register_proc("cdr", procedure::cdr);
         engine.register_proc("set-car!", procedure::setcar);
         engine.register_proc("eqv?", procedure::eqv);
+        engine.register_proc("apply", procedure::apply);
+        engine.register_proc("call-with-current-continuation", procedure::cwcc);
+        engine.register_proc("call/cc", procedure::cwcc);
+        engine.register_proc("values", procedure::values);
+        engine.register_proc("call-with-values", procedure::cwv);
         engine
     }
 

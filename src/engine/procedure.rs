@@ -102,3 +102,98 @@ pub fn setcar(values: &[Value], cont: ExprCont) -> CommCont {
 pub fn eqv(values: &[Value], cont: ExprCont) -> CommCont {
     twoarg(|lhs, rhs, cont| send(Bool(lhs == rhs), &cont), values, cont)
 }
+
+pub fn apply(values: &[Value], cont: ExprCont) -> CommCont {
+    twoarg(
+        |operator, operand, cont| match operator {
+            Procedure(proc) => {
+                let proc = Rc::clone(&proc.inner);
+                valueslist(
+                    &[operand.clone()],
+                    Rc::new(move |values| proc(&values, Rc::clone(&cont))),
+                )
+            }
+            _ => wrong("bad procedure argument"),
+        },
+        values,
+        cont,
+    )
+}
+
+// support function
+pub fn valueslist(values: &[Value], cont: ExprCont) -> CommCont {
+    onearg(
+        |arg, cont| match arg {
+            Pair(_, _, _) => {
+                let arg = arg.clone();
+                let cont = cont.clone();
+                cdr(
+                    &[arg.clone()],
+                    Rc::new(move |values| {
+                        let arg = arg.clone();
+                        let cont = cont.clone();
+                        valueslist(
+                            &values,
+                            Rc::new(move |values| {
+                                let cont = cont.clone();
+                                car(
+                                    &[arg.clone()],
+                                    single(move |value| {
+                                        let mut values = values.clone();
+                                        values.insert(0, value);
+                                        cont(values)
+                                    }),
+                                )
+                            }),
+                        )
+                    }),
+                )
+            }
+            Null => cont(vec![]),
+            _ => wrong("non-list argument"),
+        },
+        values,
+        cont,
+    )
+}
+
+pub fn cwcc(values: &[Value], cont: ExprCont) -> CommCont {
+    onearg(
+        |arg, cont| match arg {
+            Procedure(proc) => {
+                let proc = Rc::clone(&proc.inner);
+                let cont = Rc::clone(&cont);
+                Rc::new(move |store| {
+                    let new_cont = Rc::clone(&cont);
+                    let new_proc = Procedure(Proc::new(Rc::new(move |values, _cont| {
+                        new_cont(values.to_vec())
+                    })));
+                    proc(&[new_proc], Rc::clone(&cont))(store)
+                })
+            }
+            _ => wrong("bad procedure argument"),
+        },
+        values,
+        cont,
+    )
+}
+
+pub fn values(values: &[Value], cont: ExprCont) -> CommCont {
+    cont(values.to_vec())
+}
+
+pub fn cwv(values: &[Value], cont: ExprCont) -> CommCont {
+    twoarg(
+        |lhs, rhs, cont| {
+            let rhs = rhs.clone();
+            let cont = Rc::clone(&cont);
+            applicate(
+                &lhs,
+                &[],
+                Rc::new(move |values| applicate(&rhs, &values, Rc::clone(&cont))),
+            )
+        },
+        values,
+        cont,
+    )
+}
