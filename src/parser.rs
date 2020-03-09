@@ -133,10 +133,14 @@ impl<'a> Parser<'a> {
             TokenKind::Character(c) => Some(Literal(Lit::Character(c))),
             TokenKind::Str(s) => Some(Literal(Lit::Str(s))),
             TokenKind::OpenParen => match self.lexer.first()?.kind.ident() {
-                Some(Identifier::Lambda) => self.parse_lambda(),
-                Some(Identifier::If) => self.parse_conditional(),
-                Some(Identifier::Set) => self.parse_assign(),
-                _ => self.parse_call(),
+                Some(ident) => match ident {
+                    Identifier::Lambda => self.parse_lambda(),
+                    Identifier::If => self.parse_conditional(),
+                    Identifier::Set => self.parse_assign(),
+                    Identifier::Var(_) => self.parse_call(),
+                    _ => None,
+                },
+                None => self.parse_call(),
             },
             TokenKind::Quote => Some(Literal(Lit::Quote(self.parse_datum()?))),
             _ => None,
