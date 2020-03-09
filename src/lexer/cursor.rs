@@ -1,4 +1,4 @@
-use super::{is_delimiter, is_initial, is_whitespace};
+use super::{is_delimiter, is_initial, is_subsequent, is_whitespace};
 use std::str::Chars;
 
 use TokenKind::*;
@@ -146,8 +146,12 @@ impl<'a> Cursor<'a> {
                 }
             }
             c if is_initial(c) => {
-                self.eat_until(is_delimiter);
-                Some(Ident)
+                self.eat_while(is_subsequent);
+                if self.terminated(is_delimiter) {
+                    Some(Ident)
+                } else {
+                    None
+                }
             }
             c if is_whitespace(c) => {
                 self.eat_while(is_whitespace);

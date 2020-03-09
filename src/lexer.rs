@@ -4,21 +4,21 @@ use std::fmt;
 
 use TokenKind::*;
 
-pub fn is_whitespace(c: char) -> bool {
+fn is_whitespace(c: char) -> bool {
     match c {
         ' ' | '\t' | '\n' => true,
         _ => false,
     }
 }
 
-pub fn is_delimiter(c: char) -> bool {
+fn is_delimiter(c: char) -> bool {
     match c {
         '(' | ')' | '"' | ';' => true,
         c => is_whitespace(c),
     }
 }
 
-pub fn is_initial(c: char) -> bool {
+fn is_initial(c: char) -> bool {
     match c {
         '!' | '$' | '%' | '&' | '*' | '/' | ':' => true,
         '<' | '=' | '>' | '?' | '^' | '_' | '~' => true,
@@ -28,7 +28,7 @@ pub fn is_initial(c: char) -> bool {
     }
 }
 
-pub fn is_subsequent(c: char) -> bool {
+fn is_subsequent(c: char) -> bool {
     match c {
         c if is_initial(c) => true,
         c if c.is_digit(10) => true,
